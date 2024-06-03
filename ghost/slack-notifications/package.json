@@ -26,6 +26,6 @@
     "@tryghost/errors": "1.3.2",
     "@tryghost/validator": "0.2.11",
     "@tryghost/version": "0.1.28",
-    "got": "9.6.0"
+    "got": "11.8.5"
   }
 }
