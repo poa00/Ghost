@@ -4,33 +4,17 @@ import React from 'react';
 import {List} from '@tryghost/admin-x-design-system';
 
 const features = [{
-    title: 'URL cache',
-    description: 'Enable URL Caching',
-    flag: 'urlCache'
-},{
-    title: 'Lexical multiplayer',
-    description: 'Enables multiplayer editing in the lexical editor.',
-    flag: 'lexicalMultiplayer'
-},{
     title: 'Webmentions',
     description: 'Allows viewing received mentions on the dashboard.',
     flag: 'webmentions'
 },{
-    title: 'Websockets',
-    description: <>Test out Websockets functionality at <code>/ghost/#/websockets</code>.</>,
-    flag: 'websockets'
-},{
-    title: 'Stripe Automatic Tax',
+    title: 'Stripe Automatic Tax (private beta)',
     description: 'Use Stripe Automatic Tax at Stripe Checkout. Needs to be enabled in Stripe',
     flag: 'stripeAutomaticTax'
 },{
     title: 'Email customization',
     description: 'Adding more control over the newsletter template',
     flag: 'emailCustomization'
-},{
-    title: 'Collections',
-    description: 'Enables Collections 2.0',
-    flag: 'collections'
 },{
     title: 'Collections Card',
     description: 'Enables the Collections Card for pages - requires Collections and the beta Editor to be enabled',
@@ -44,25 +28,33 @@ const features = [{
     description: 'Enables tier to be specified when importing members',
     flag: 'importMemberTier'
 },{
-    title: 'Tips & donations',
-    description: 'Enables publishers to collect one-time payments',
-    flag: 'tipsAndDonations'
-},{
-    title: 'Filter by email disabled',
-    description: 'Allows filtering members by email disabled',
-    flag: 'filterEmailDisabled'
-},{
     title: 'AdminX Demo',
     description: 'Adds a navigation link to the AdminX demo app',
     flag: 'adminXDemo'
 },{
-    title: 'New email addresses',
-    description: 'For self hosters, forces the usage of the mail.from config as from address for all outgoing emails',
-    flag: 'newEmailAddresses'
+    title: 'NestJS Playground',
+    description: 'Wires up the Ghost NestJS App to the Admin API (also needs GHOST_ENABLE_NEST_FRAMEWORK=1 env var)',
+    flag: 'NestPlayground'
 },{
-    title: 'Portal improvements',
-    description: 'Adds a bunch of improvements to portal and portal settings',
-    flag: 'portalImprovements'
+    title: 'ActivityPub',
+    description: '(Highly) Experimental support for ActivityPub.',
+    flag: 'ActivityPub'
+},{
+    title: 'Content Visibility (Beta)',
+    description: 'Enables content visibility in Emails - Changes already released to beta testers',
+    flag: 'contentVisibility'
+},{
+    title: 'Content Visibility (Alpha)',
+    description: 'Enables content visibility in Emails - Additional changes for internal testing. NOTE: requires `contentVisibility` to also be enabled',
+    flag: 'contentVisibilityAlpha'
+},{
+    title: 'Post analytics redesign',
+    description: 'Enables redesigned Post analytics page',
+    flag: 'postsX'
+}, {
+    title: 'Sign-up CAPTCHA',
+    description: 'Enable CAPTCHA for member sign-up and sign-in',
+    flag: 'captcha'
 }];
 
 const AlphaFeatures: React.FC = () => {

@@ -137,7 +137,55 @@ describe('Portal Data links:', () => {
             expect(signupTitle).toBeInTheDocument();
         });
 
-        test('opens portal signup page with free plan even if free plan is hidden', async () => {
+        describe('on a paid-members only site', () => {
+            describe('with only a free plan', () => {
+                test('renders invite-only message and does not allow signups', async () => {
+                    window.location.hash = '#/portal/signup';
+                    let {
+                        popupFrame
+                    } = await setup({
+                        site: {...FixtureSite.singleTier.onlyFreePlan, members_signup_access: 'paid'},
+                        member: null
+                    });
+
+                    expect(popupFrame).toBeInTheDocument();
+
+                    const inviteOnlyMessage = within(popupFrame.contentDocument).queryByText(/This site is invite-only/i);
+                    expect(inviteOnlyMessage).toBeInTheDocument();
+                });
+            });
+
+            describe('with paid plans', () => {
+                test('allows paid signups', async () => {
+                    window.location.hash = '#/portal/signup';
+
+                    // Set up a paid-members only site with a free tier + 3 paid tiers
+                    let {
+                        popupFrame
+
+                    } = await setup({
+                        site: {...FixtureSite.multipleTiers.basic, members_signup_access: 'paid'},
+                        member: null
+                    });
+
+                    expect(popupFrame).toBeInTheDocument();
+
+                    const emailInput = within(popupFrame.contentDocument).getByLabelText(/email/i);
+                    const nameInput = within(popupFrame.contentDocument).getByLabelText(/name/i);
+                    const chooseBtns = within(popupFrame.contentDocument).queryAllByRole('button', {name: 'Choose'});
+
+                    expect(emailInput).toBeInTheDocument();
+                    expect(nameInput).toBeInTheDocument();
+
+                    // There should be 3 choose buttons, one for each paid tier
+                    expect(chooseBtns).toHaveLength(3);
+                });
+            });
+        });
+    });
+
+    describe('#/portal/signup/free', () => {
+        test('opens free signup page even if free plan is hidden', async () => {
             window.location.hash = '#/portal/signup/free';
             let {
                 popupFrame, triggerButtonFrame, ...utils
@@ -159,6 +207,23 @@ describe('Portal Data links:', () => {
             expect(signinButton).toBeInTheDocument();
             const signupTitle = within(popupFrame.contentDocument).queryByText(/already a member/i);
             expect(signupTitle).toBeInTheDocument();
+        });
+
+        describe('on a paid-members only site', () => {
+            test('renders paid-members only message and does not allow signups', async () => {
+                window.location.hash = '#/portal/signup/free';
+                let {
+                    popupFrame
+                } = await setup({
+                    site: {...FixtureSite.multipleTiers.basic, members_signup_access: 'paid'},
+                    member: null
+                });
+
+                expect(popupFrame).toBeInTheDocument();
+
+                const paidMembersOnlyMessage = within(popupFrame.contentDocument).queryByText(/This site only accepts paid members/i);
+                expect(paidMembersOnlyMessage).toBeInTheDocument();
+            });
         });
     });
 
@@ -213,6 +278,42 @@ describe('Portal Data links:', () => {
             expect(popupFrame).toBeInTheDocument();
             const accountProfileTitle = within(popupFrame.contentDocument).queryByText(/account settings/i);
             expect(accountProfileTitle).toBeInTheDocument();
+        });
+    });
+
+    describe('#/portal/account/newsletter/help', () => {
+        test('opens portal newsletter receiving help page', async () => {
+            window.location.hash = '#/portal/account/newsletters/help';
+            let {
+                popupFrame, triggerButtonFrame, ...utils
+            } = await setup({
+                site: FixtureSite.singleTier.basic,
+                member: FixtureMember.free,
+                showPopup: false
+            });
+            expect(triggerButtonFrame).toBeInTheDocument();
+            popupFrame = await utils.findByTitle(/portal-popup/i);
+            expect(popupFrame).toBeInTheDocument();
+            const helpPageTitle = within(popupFrame.contentDocument).queryByText(/help! i'm not receiving emails/i);
+            expect(helpPageTitle).toBeInTheDocument();
+        });
+    });
+
+    describe('#/portal/account/newsletter/disabled', () => {
+        test('opens portal newsletter receiving help page', async () => {
+            window.location.hash = '#/portal/account/newsletters/disabled';
+            let {
+                popupFrame, triggerButtonFrame, ...utils
+            } = await setup({
+                site: FixtureSite.singleTier.basic,
+                member: FixtureMember.free,
+                showPopup: false
+            });
+            expect(triggerButtonFrame).toBeInTheDocument();
+            popupFrame = await utils.findByTitle(/portal-popup/i);
+            expect(popupFrame).toBeInTheDocument();
+            const helpPageTitle = within(popupFrame.contentDocument).queryByText(/why has my email been disabled/i);
+            expect(helpPageTitle).toBeInTheDocument();
         });
     });
 });

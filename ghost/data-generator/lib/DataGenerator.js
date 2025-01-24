@@ -204,10 +204,15 @@ class DataGenerator {
 
     async #run(transaction) {
         if (!DatabaseInfo.isSQLite(this.knex)) {
-            await transaction.raw('ALTER INSTANCE DISABLE INNODB REDO_LOG;');
-            await transaction.raw('SET FOREIGN_KEY_CHECKS=0;');
-            await transaction.raw('SET unique_checks=0;');
-            await transaction.raw('SET GLOBAL local_infile=1;');
+            if (process.env.DISABLE_FAST_IMPORT) {
+                await transaction.raw('SET FOREIGN_KEY_CHECKS=0;');
+                await transaction.raw('SET unique_checks=0;');
+            } else {
+                await transaction.raw('ALTER INSTANCE DISABLE INNODB REDO_LOG;');
+                await transaction.raw('SET FOREIGN_KEY_CHECKS=0;');
+                await transaction.raw('SET unique_checks=0;');
+                await transaction.raw('SET GLOBAL local_infile=1;');
+            }
         }
 
         if (this.willClearData) {
@@ -269,6 +274,13 @@ class DataGenerator {
                 baseUrl: this.baseUrl
             });
             await tableImporter.finalise();
+        }
+
+        // Re-enable the redo log because it's a persisted global
+        // Leaving it disabled can break the database in the event of an unexpected shutdown
+        // See https://dev.mysql.com/doc/refman/8.0/en/innodb-redo-log.html#innodb-disable-redo-logging
+        if (!DatabaseInfo.isSQLite(this.knex) && !process.env.DISABLE_FAST_IMPORT) {
+            await transaction.raw('ALTER INSTANCE ENABLE INNODB REDO_LOG;');
         }
     }
 }

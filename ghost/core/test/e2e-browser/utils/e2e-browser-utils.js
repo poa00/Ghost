@@ -60,7 +60,7 @@ const setupGhost = async (page) => {
         await page.getByPlaceholder('At least 10 characters').fill(ownerUser.password);
 
         await page.getByPlaceholder('At least 10 characters').press('Enter');
-        await page.locator('.gh-done-pink').click();
+
         await page.locator('.gh-nav').waitFor(options);
     }
 };
@@ -96,10 +96,10 @@ const setupStripe = async (page, stripConnectIntegrationToken) => {
     await expect(modal.getByRole('button', {name: 'Disconnect'})).toBeVisible();
     await modal.getByRole('button', {name: 'Close'}).click();
 
-    await page.getByRole('button', {name: '← Done'}).click();
+    await page.getByTestId('exit-settings').click();
 };
 
-// Setup Mailgun with fake data, for Ghost Admin to allow bulk sending
+// Setup Mailgun with fake data for Ghost Admin to allow bulk sending
 const setupMailgun = async (page) => {
     await page.locator('.gh-nav a[href="#/settings/"]').click();
     const section = page.getByTestId('mailgun');
@@ -110,7 +110,7 @@ const setupMailgun = async (page) => {
     await section.getByRole('button', {name: 'Save'}).click();
     await section.getByText('Mailgun is set up').waitFor();
 
-    await page.getByRole('button', {name: '← Done'}).click();
+    await page.getByTestId('exit-settings').click();
 };
 
 /**
@@ -125,9 +125,8 @@ const enableLabs = async (page) => {
 
     await section.getByRole('tab', {name: 'Alpha features'}).click();
     await section.getByLabel('Webmentions').click();
-    await section.getByLabel('Tips & donations').click();
 
-    await page.getByRole('button', {name: '← Done'}).click();
+    await page.getByTestId('exit-settings').click();
 };
 
 /**
@@ -195,7 +194,8 @@ const createTier = async (page, {name, monthlyPrice, yearlyPrice, trialDays}, en
             await page.getByTestId('tier-detail-modal').getByRole('button', {name: 'Archive tier'}).click();
             await page.getByTestId('confirmation-modal').getByRole('button', {name: 'Archive'}).click();
             await page.getByTestId('tier-detail-modal').getByRole('button', {name: 'Reactivate tier'}).waitFor();
-            await page.getByTestId('tier-detail-modal').getByRole('button', {name: 'Save & close'}).click();
+            await page.getByTestId('tier-detail-modal').getByRole('button', {name: 'Save'}).click();
+            await page.getByTestId('tier-detail-modal').getByRole('button', {name: 'Close'}).click();
         }
 
         // Add the tier
@@ -209,7 +209,8 @@ const createTier = async (page, {name, monthlyPrice, yearlyPrice, trialDays}, en
             await modal.getByLabel('Add a free trial').check();
             await modal.getByLabel('Trial days').fill(`${trialDays}`);
         }
-        await modal.getByRole('button', {name: 'Save & close'}).click();
+        await modal.getByRole('button', {name: 'Save'}).click();
+        await modal.getByRole('button', {name: 'Close'}).click();
         await page.locator('[data-testid="tier-card"]:visible').filter({hasText: name}).waitFor();
 
         // Enable the tier in portal
@@ -250,64 +251,78 @@ const createTier = async (page, {name, monthlyPrice, yearlyPrice, trialDays}, en
  */
 
 const createOffer = async (page, {name, tierName, offerType, amount, discountType = null, discountDuration = 3}) => {
-    await page.goto('/ghost');
-    await page.locator('[data-test-nav="settings"]').click();
+    let offerName;
+    let offerLink;
+    await test.step('Create an offer', async () => {
+        await page.goto('/ghost');
+        await page.locator('[data-test-nav="settings"]').click();
 
-    // Keep offer names unique & <= 40 characters
-    let offerName = `${name} (${new ObjectID().toHexString().slice(0, 40 - name.length - 3)})`;
-    // Tiers request can take time, so waiting until there is no connections before interacting with them
-    await page.waitForLoadState('networkidle');
+        // Keep offer names unique & <= 40 characters
+        offerName = `${name} (${new ObjectID().toHexString().slice(0, 40 - name.length - 3)})`;
+        // Tiers request can take time, so waiting until there is no connections before interacting with them
+        await page.waitForLoadState('networkidle');
+        // ... and even so, the component updates can take a bit to trickle down, so we should verify that the Tier is fully loaded before proceeding
+        await page.getByTestId('tiers').getByText('No active tiers found').waitFor({state: 'hidden'});
+        await page.getByTestId('offers').getByRole('button', {name: 'Manage tiers'}).waitFor({state: 'hidden'});
 
-    const hasExistingOffers = await page.getByTestId('offers').getByRole('button', {name: 'Manage offers'}).isVisible();
-    const isCTA = await page.getByTestId('offers').getByRole('button', {name: 'Add offer'}).isVisible();
-    // Archive other offers to keep the list tidy
-    // We only need 1 offer to be active at a time
-    // Either the list of active offers loads, or the CTA when no offers exist
-    if (hasExistingOffers && !isCTA) {
-        await page.getByTestId('offers').getByRole('button', {name: 'Manage offers'}).click();
+        // only one of these buttons is ever available - either 'Add offer' or 'Manage offers'
+        const hasExistingOffers = await page.getByTestId('offers').getByRole('button', {name: 'Manage offers'}).isVisible();
+        const isCTA = await page.getByTestId('offers').getByRole('button', {name: 'Add offer'}).isVisible();
 
-        // Selector for the elements with data-testid 'offer-item'
-        // const offerItemsSelector = '[data-testid="offer-item"]';
-        await page.getByTestId('offer-item').nth(0).click();
-        await page.getByRole('button', {name: 'Archive offer'}).click();
+        // Archive other offers to keep the list tidy
+        // We only need 1 offer to be active at a time
+        // Either the list of active offers loads, or the CTA when no offers exist
+        if (hasExistingOffers && !isCTA) {
+            await page.getByTestId('offers').getByRole('button', {name: 'Manage offers'}).click();
 
-        const confirmModal = await page.getByTestId('confirmation-modal');
-        await confirmModal.getByRole('button', {name: 'Archive'}).click();
-    }
+            // Selector for the elements with data-testid 'offer-item'
+            // const offerItemsSelector = '[data-testid="offer-item"]';
+            await page.getByTestId('offer-item').nth(0).click();
+            await page.getByRole('button', {name: 'Archive offer'}).click();
 
-    if (isCTA) {
-        await page.getByTestId('offers').getByRole('button', {name: 'Add offer'}).click();
-    } else {
-        await page.getByText('New offer').click();
-    }
-
-    // const newOfferButton = await page.getByTestId('offers').getByRole('button', {name: 'Add offer'}) || await page.getByTestId('offers').getByRole('button', {name: 'New offer'});
-    // await page.getByTestId('offers').getByRole('button', {name: 'Add offer'}).click();
-    // await newOfferButton.click();
-    await page.getByLabel('Offer name').fill(offerName);
-
-    if (offerType === 'freeTrial') {
-        // await page.getByRole('button', {name: 'Free trial Give free access for a limited time.'}).click();
-        await page.getByText('Give free access for a limited time').click();
-        await page.getByLabel('Trial duration').fill(`${amount}`);
-    } else if (offerType === 'discount') {
-        await page.getByLabel('Amount off').fill(`${amount}`);
-        if (discountType === 'multiple-months') {
-            await chooseOptionInSelect(page.getByTestId('duration-select-offers'), `Multiple-months`);
-            await page.getByLabel('Duration in months').fill(discountDuration.toString());
-            // await page.locator('[data-test-select="offer-duration"]').selectOption('repeating');
-            // await page.locator('input#duration-months').fill(discountDuration.toString());
+            const confirmModal = await page.getByTestId('confirmation-modal');
+            await confirmModal.getByRole('button', {name: 'Archive'}).click();
         }
 
-        if (discountType === 'forever') {
-            await chooseOptionInSelect(page.getByTestId('duration-select-offers'), `Forever`);
+        if (isCTA) {
+            await page.getByTestId('offers').getByRole('button', {name: 'Add offer'}).click();
+        } else {
+            // ensure the modal is open
+            if (!page.getByTestId('offers-modal').isVisible()) {
+                await page.getByTestId('offers').getByRole('button', {name: 'Manage offers'}).click();
+            }
+            await page.getByText('New offer').click();
         }
-    }
 
-    await chooseOptionInSelect(page.getByTestId('tier-cadence-select-offers'), `${tierName} - Monthly`);
-    await page.getByRole('button', {name: 'Publish'}).click();
-    await page.waitForLoadState('networkidle');
-    const offerLink = await page.locator('input[name="offer-url"]').inputValue();
+        await page.getByLabel('Offer name').fill(offerName);
+
+        if (offerType === 'freeTrial') {
+            // await page.getByRole('button', {name: 'Free trial Give free access for a limited time.'}).click();
+            await page.getByText('Give free access for a limited time').click();
+            await page.getByLabel('Trial duration').fill(`${amount}`);
+        } else if (offerType === 'discount') {
+            await page.getByLabel('Amount off').fill(`${amount}`);
+            if (discountType === 'multiple-months') {
+                await chooseOptionInSelect(page.getByTestId('duration-select-offers'), `Multiple-months`);
+                await page.getByLabel('Duration in months').fill(discountDuration.toString());
+                // await page.locator('[data-test-select="offer-duration"]').selectOption('repeating');
+                // await page.locator('input#duration-months').fill(discountDuration.toString());
+            }
+
+            if (discountType === 'forever') {
+                await chooseOptionInSelect(page.getByTestId('duration-select-offers'), `Forever`);
+            }
+        }
+
+        await chooseOptionInSelect(page.getByTestId('tier-cadence-select-offers'), `${tierName} - Monthly`);
+        await page.getByRole('button', {name: 'Publish'}).click();
+        await page.waitForLoadState('networkidle');
+
+        const offerLinkInput = await page.locator('input[name="offer-url"]');
+        // sometimes offer link is not generated, and if so the rest of the test will fail
+        await expect(offerLinkInput).not.toBeEmpty();
+        offerLink = await offerLinkInput.inputValue();
+    });
 
     return {offerName, offerLink};
 };
@@ -318,7 +333,7 @@ const fillInputIfExists = async (page, selector, value) => {
     }
 };
 
-const completeStripeSubscription = async (page) => {
+const completeStripeSubscription = async (page, {awaitNetworkIdle = true} = {}) => {
     await page.locator('#cardNumber').fill('4242 4242 4242 4242');
     await page.locator('#cardExpiry').fill('04 / 26');
     await page.locator('#cardCvc').fill('424');
@@ -343,7 +358,9 @@ const completeStripeSubscription = async (page) => {
 
     await page.getByTestId('hosted-payment-submit-button').click();
 
-    await page.waitForLoadState('networkidle');
+    if (awaitNetworkIdle) {
+        await page.waitForLoadState('networkidle');
+    }
 };
 
 /**
@@ -407,7 +424,7 @@ const createPostDraft = async (page, {title = 'Hello world', body = 'This is my 
     await page.locator('[data-test-editor-title-input]').fill(title);
 
     // wait for editor to be ready
-    await expect(page.locator('[data-lexical-editor="true"]')).toBeVisible();
+    await expect(page.locator('[data-lexical-editor="true"]').first()).toBeVisible();
 
     // Continue to the body by pressing enter
     await page.keyboard.press('Enter');
