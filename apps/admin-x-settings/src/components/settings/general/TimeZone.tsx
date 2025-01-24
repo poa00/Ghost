@@ -1,10 +1,10 @@
 import React, {useEffect, useState} from 'react';
-import Select from '../../../admin-x-ds/global/form/Select';
-import SettingGroup from '../../../admin-x-ds/settings/SettingGroup';
-import SettingGroupContent from '../../../admin-x-ds/settings/SettingGroupContent';
+import TopLevelGroup from '../../TopLevelGroup';
 import timezoneData from '@tryghost/timezone-data';
 import useSettingGroup from '../../../hooks/useSettingGroup';
-import {getLocalTime, getSettingValues} from '../../../utils/helpers';
+import {Select, SettingGroupContent, withErrorBoundary} from '@tryghost/admin-x-design-system';
+import {getLocalTime} from '../../../utils/helpers';
+import {getSettingValues} from '@tryghost/admin-x-framework/api/settings';
 
 interface TimezoneDataDropdownOption {
     name: string;
@@ -47,43 +47,22 @@ const TimeZone: React.FC<{ keywords: string[] }> = ({keywords}) => {
 
     const [publicationTimezone] = getSettingValues(localSettings, ['timezone']) as string[];
 
-    const timezoneOptions = timezoneData.map((tzOption: TimezoneDataDropdownOption) => {
+    const timezoneOptions: Array<{value: string; label: string}> = timezoneData.map((tzOption: TimezoneDataDropdownOption) => {
         return {
             value: tzOption.name,
             label: tzOption.label
         };
     });
 
-    const handleTimezoneChange = (value: string) => {
-        updateSetting('timezone', value);
+    const handleTimezoneChange = (value?: string) => {
+        updateSetting('timezone', value || null);
+        handleEditingChange(true);
     };
 
-    const viewContent = (
-        <SettingGroupContent values={[
-            {
-                key: 'site-timezone',
-                value: publicationTimezone,
-                hint: (
-                    <Hint timezone={publicationTimezone} />
-                )
-            }
-        ]} />
-    );
-    const inputFields = (
-        <SettingGroupContent columns={1}>
-            <Select
-                hint={<Hint timezone={publicationTimezone} />}
-                options={timezoneOptions}
-                selectedOption={publicationTimezone}
-                title="Site timezone"
-                onSelect={handleTimezoneChange}
-            />
-        </SettingGroupContent>
-    );
-
     return (
-        <SettingGroup
+        <TopLevelGroup
             description='Set the time and date of your publication, used for all published posts'
+            hideEditButton={true}
             isEditing={isEditing}
             keywords={keywords}
             navid='timezone'
@@ -94,9 +73,19 @@ const TimeZone: React.FC<{ keywords: string[] }> = ({keywords}) => {
             onEditingChange={handleEditingChange}
             onSave={handleSave}
         >
-            {isEditing ? inputFields : viewContent}
-        </SettingGroup>
+            <SettingGroupContent columns={1}>
+                <Select
+                    hint={<Hint timezone={publicationTimezone} />}
+                    options={timezoneOptions}
+                    selectedOption={timezoneOptions.find(option => option.value === publicationTimezone)}
+                    testId='timezone-select'
+                    title="Site timezone"
+                    isSearchable
+                    onSelect={option => handleTimezoneChange(option?.value)}
+                />
+            </SettingGroupContent>
+        </TopLevelGroup>
     );
 };
 
-export default TimeZone;
+export default withErrorBoundary(TimeZone, 'Site timezone');

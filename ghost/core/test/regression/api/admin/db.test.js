@@ -2,7 +2,7 @@ const path = require('path');
 const _ = require('lodash');
 const os = require('os');
 const fs = require('fs-extra');
-const uuid = require('uuid');
+const crypto = require('crypto');
 const should = require('should');
 const supertest = require('supertest');
 const sinon = require('sinon');
@@ -61,7 +61,7 @@ describe('DB API', function () {
     });
 
     it('can export & import', function () {
-        const exportFolder = path.join(os.tmpdir(), uuid.v4());
+        const exportFolder = path.join(os.tmpdir(), crypto.randomUUID());
         const exportPath = path.join(exportFolder, 'export.json');
 
         return request.put(localUtils.API.getApiQuery('settings/'))
@@ -376,6 +376,15 @@ describe('DB API', function () {
         yearlyPrice.get('interval').should.equal('year');
         yearlyPrice.get('stripe_price_id').should.equal('price_d04baebb73');
         yearlyPrice.get('stripe_product_id').should.equal('prod_d2c1708c21');
+    });
+
+    it('Can not import a ZIP-file with symlinks', async function () {
+        await request.post(localUtils.API.getApiQuery('db/'))
+            .set('Origin', config.get('url'))
+            .set('Accept', 'application/json')
+            .expect('Content-Type', /json/)
+            .attach('importfile', path.join(__dirname, '/../../../utils/fixtures/import/symlinks.zip'))
+            .expect(415);
     });
 });
 

@@ -2,31 +2,27 @@ import {resolve} from 'path';
 import fs from 'fs/promises';
 
 import {defineConfig} from 'vitest/config';
-import commonjs from 'vite-plugin-commonjs';
 import reactPlugin from '@vitejs/plugin-react';
 import svgrPlugin from 'vite-plugin-svgr';
 
 import pkg from './package.json';
-
+import {SUPPORTED_LOCALES} from '@tryghost/i18n';
 export default defineConfig((config) => {
     const outputFileName = pkg.name[0] === '@' ? pkg.name.slice(pkg.name.indexOf('/') + 1) : pkg.name;
 
     return {
+        logLevel: process.env.CI ? 'info' : 'warn',
         clearScreen: false,
         define: {
             'process.env.NODE_ENV': JSON.stringify(config.mode)
         },
         preview: {
+            host: '0.0.0.0',
             port: 4178
         },
         plugins: [
             reactPlugin(),
-            svgrPlugin(),
-            commonjs({
-                dynamic: {
-                    loose: true
-                }
-            })
+            svgrPlugin()
         ],
         esbuild: {
             loader: 'jsx',
@@ -50,6 +46,7 @@ export default defineConfig((config) => {
         },
         build: {
             outDir: resolve(__dirname, 'umd'),
+            reportCompressedSize: false,
             emptyOutDir: true,
             minify: true,
             sourcemap: true,
@@ -59,6 +56,11 @@ export default defineConfig((config) => {
                 formats: ['umd'],
                 name: pkg.name,
                 fileName: format => `${outputFileName}.min.js`
+            },
+            commonjsOptions: {
+                include: [/ghost/, /node_modules/],
+                dynamicRequireRoot: '../../',
+                dynamicRequireTargets: SUPPORTED_LOCALES.map(locale => `../../ghost/i18n/locales/${locale}/search.json`)
             }
         },
         test: {

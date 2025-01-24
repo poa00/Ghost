@@ -119,6 +119,7 @@ function getHomeSchema(metaData) {
         '@type': 'WebSite',
         publisher: schemaPublisherObject(metaData),
         url: metaData.url,
+        name: metaData.site.title,
         image: schemaImageObject(metaData.coverImage),
         mainEntityOfPage: metaData.url,
         description: metaData.metaDescription ?
@@ -152,7 +153,7 @@ function getAuthorSchema(metaData, data) {
         sameAs: trimSameAs(data, 'author'),
         name: escapeExpression(data.author.name),
         url: metaData.authorUrl,
-        image: schemaImageObject(metaData.coverImage),
+        image: schemaImageObject(metaData.authorImage) || schemaImageObject(metaData.coverImage),
         mainEntityOfPage: metaData.authorUrl,
         description: metaData.metaDescription ?
             escapeExpression(metaData.metaDescription) :

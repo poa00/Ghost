@@ -2,18 +2,22 @@ const {promises: fs, readFileSync} = require('fs');
 const path = require('path');
 const moment = require('moment');
 const glob = require('glob');
+const {EmailAddressParser} = require('@tryghost/email-addresses');
 
 class StaffServiceEmails {
-    constructor({logging, models, mailer, settingsHelpers, settingsCache, urlUtils}) {
+    constructor({logging, models, mailer, settingsHelpers, settingsCache, blogIcon, urlUtils, labs}) {
         this.logging = logging;
         this.models = models;
         this.mailer = mailer;
         this.settingsHelpers = settingsHelpers;
         this.settingsCache = settingsCache;
+        this.blogIcon = blogIcon;
         this.urlUtils = urlUtils;
+        this.labs = labs;
 
-        this.Handlebars = require('handlebars');
+        this.Handlebars = require('handlebars').create();
         this.registerPartials();
+        this.registerHelpers();
     }
 
     async notifyFreeMemberSignup({
@@ -33,18 +37,21 @@ class StaffServiceEmails {
                 attributionTitle = 'Homepage';
             }
 
+            let staffUrl = this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`);
+
             const templateData = {
                 memberData,
                 attributionTitle,
                 attributionUrl: attribution?.url || '',
                 referrerSource: attribution?.referrerSource,
                 siteTitle: this.settingsCache.get('title'),
+                siteIconUrl: this.blogIcon.getIconUrl({absolute: true, fallbackToDefault: false}),
                 siteUrl: this.urlUtils.getSiteUrl(),
                 siteDomain: this.siteDomain,
                 accentColor: this.settingsCache.get('accent_color'),
                 fromEmail: this.fromEmailAddress,
                 toEmail: to,
-                staffUrl: this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`)
+                staffUrl: staffUrl
             };
 
             const {html, text} = await this.renderEmailTemplate('new-free-signup', templateData);
@@ -87,6 +94,8 @@ class StaffServiceEmails {
                 attributionTitle = 'Homepage';
             }
 
+            let staffUrl = this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`);
+
             const templateData = {
                 memberData,
                 attributionTitle,
@@ -96,12 +105,13 @@ class StaffServiceEmails {
                 offerData,
                 subscriptionData,
                 siteTitle: this.settingsCache.get('title'),
+                siteIconUrl: this.blogIcon.getIconUrl({absolute: true, fallbackToDefault: false}),
                 siteUrl: this.urlUtils.getSiteUrl(),
                 siteDomain: this.siteDomain,
                 accentColor: this.settingsCache.get('accent_color'),
                 fromEmail: this.fromEmailAddress,
                 toEmail: to,
-                staffUrl: this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`)
+                staffUrl: staffUrl
             };
 
             const {html, text} = await this.renderEmailTemplate('new-paid-started', templateData);
@@ -115,7 +125,7 @@ class StaffServiceEmails {
         }
     }
 
-    async notifyPaidSubscriptionCanceled({member, tier, subscription}, options = {}) {
+    async notifyPaidSubscriptionCanceled({member, tier, subscription, cancelNow, expiryAt, canceledAt}, options = {}) {
         const users = await this.models.User.getEmailAlertUsers('paid-canceled', options);
 
         for (const user of users) {
@@ -133,22 +143,26 @@ class StaffServiceEmails {
             };
 
             const subscriptionData = {
-                expiryAt: this.getFormattedDate(subscription.cancelAt),
-                canceledAt: this.getFormattedDate(subscription.canceledAt),
+                expiryAt: this.getFormattedDate(expiryAt),
+                cancelNow: cancelNow,
+                canceledAt: this.getFormattedDate(canceledAt),
                 cancellationReason: subscription.cancellationReason || ''
             };
+
+            let staffUrl = this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`);
 
             const templateData = {
                 memberData,
                 tierData,
                 subscriptionData,
                 siteTitle: this.settingsCache.get('title'),
+                siteIconUrl: this.blogIcon.getIconUrl({absolute: true, fallbackToDefault: false}),
                 siteUrl: this.urlUtils.getSiteUrl(),
                 siteDomain: this.siteDomain,
                 accentColor: this.settingsCache.get('accent_color'),
                 fromEmail: this.fromEmailAddress,
                 toEmail: to,
-                staffUrl: this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`)
+                staffUrl: staffUrl
             };
 
             const {html, text} = await this.renderEmailTemplate('new-paid-cancellation', templateData);
@@ -168,14 +182,17 @@ class StaffServiceEmails {
      * @param {string} recipient.slug
      */
     async getSharedData(recipient) {
+        let staffUrl = this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${recipient.slug}`);
+
         return {
             siteTitle: this.settingsCache.get('title'),
+            siteIconUrl: this.blogIcon.getIconUrl({absolute: true, fallbackToDefault: false}),
             siteUrl: this.urlUtils.getSiteUrl(),
             siteDomain: this.siteDomain,
             accentColor: this.settingsCache.get('accent_color'),
             fromEmail: this.fromEmailAddress,
             toEmail: recipient.email,
-            staffUrl: this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${recipient.slug}`)
+            staffUrl: staffUrl
         };
     }
 
@@ -210,6 +227,8 @@ class StaffServiceEmails {
         for (const user of users) {
             const to = user.email;
 
+            let staffUrl = this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`);
+
             const templateData = {
                 siteTitle: this.settingsCache.get('title'),
                 siteUrl: this.urlUtils.getSiteUrl(),
@@ -219,7 +238,7 @@ class StaffServiceEmails {
                 partial: `milestones/${milestone.value}`,
                 toEmail: to,
                 adminUrl: this.urlUtils.urlFor('admin', true),
-                staffUrl: this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`)
+                staffUrl: staffUrl
             };
 
             const {html, text} = await this.renderEmailTemplate('new-milestone-received', templateData);
@@ -227,6 +246,68 @@ class StaffServiceEmails {
             emailPromises.push(await this.sendMail({
                 to,
                 subject: emailData.subject,
+                html,
+                text
+            }));
+        }
+
+        const results = await Promise.allSettled(emailPromises);
+
+        for (const result of results) {
+            if (result.status === 'rejected') {
+                this.logging.warn(result?.reason);
+            }
+        }
+    }
+
+    /**
+     *
+     * @param {object} eventData
+     * @param {import('@tryghost/donations').DonationPaymentEvent} eventData.donationPaymentEvent
+     *
+     * @returns {Promise<void>}
+     */
+    async notifyDonationReceived({donationPaymentEvent}) {
+        const emailPromises = [];
+        const users = await this.models.User.getEmailAlertUsers('donation');
+        const formattedAmount = this.getFormattedAmount({currency: donationPaymentEvent.currency, amount: donationPaymentEvent.amount / 100});
+
+        const subject = `💰 One-time payment received: ${formattedAmount} from ${donationPaymentEvent.name ?? donationPaymentEvent.email}`;
+        const memberData = donationPaymentEvent.memberId ? this.getMemberData({
+            id: donationPaymentEvent.memberId,
+            name: donationPaymentEvent.name ?? null,
+            email: donationPaymentEvent.email
+        }) : null;
+
+        for (const user of users) {
+            const to = user.email;
+
+            let staffUrl = this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/settings/staff/${user.slug}`);
+
+            const templateData = {
+                siteTitle: this.settingsCache.get('title'),
+                siteUrl: this.urlUtils.getSiteUrl(),
+                siteIconUrl: this.blogIcon.getIconUrl({absolute: true, fallbackToDefault: false}),
+                siteDomain: this.siteDomain,
+                fromEmail: this.fromEmailAddress,
+                toEmail: to,
+                adminUrl: this.urlUtils.urlFor('admin', true),
+                staffUrl: staffUrl,
+                donation: {
+                    name: donationPaymentEvent.name ?? donationPaymentEvent.email,
+                    email: donationPaymentEvent.email,
+                    amount: formattedAmount,
+                    donationMessage: donationPaymentEvent.donationMessage
+                },
+                memberData,
+                accentColor: this.settingsCache.get('accent_color')
+            };
+
+            const {html, text} = await this.renderEmailTemplate('donation', templateData);
+
+            emailPromises.push(await this.sendMail({
+                to,
+                subject,
                 html,
                 text
             }));
@@ -253,7 +334,7 @@ class StaffServiceEmails {
             adminUrl: this.urlUtils.urlJoin(this.urlUtils.urlFor('admin', true), '#', `/members/${member.id}`),
             initials: this.extractInitials(name),
             location: this.getGeolocationData(member.geolocation),
-            createdAt: moment(member.created_at).format('D MMM YYYY')
+            createdAt: member.created_at ? moment(member.created_at).format('D MMM YYYY') : null
         };
     }
 
@@ -347,13 +428,8 @@ class StaffServiceEmails {
         return this.settingsHelpers.getDefaultEmailDomain();
     }
 
-    get membersAddress() {
-        // TODO: get from address of default newsletter?
-        return `noreply@${this.defaultEmailDomain}`;
-    }
-
     get fromEmailAddress() {
-        return `ghost@${this.defaultEmailDomain}`;
+        return EmailAddressParser.stringify(this.settingsHelpers.getDefaultEmail());
     }
 
     extractInitials(name = '') {
@@ -386,10 +462,7 @@ class StaffServiceEmails {
         });
     }
 
-    async renderHTML(templateName, data) {
-        const htmlTemplateSource = await fs.readFile(path.join(__dirname, './email-templates/', `${templateName}.hbs`), 'utf8');
-        const htmlTemplate = this.Handlebars.compile(Buffer.from(htmlTemplateSource).toString());
-
+    registerHelpers() {
         this.Handlebars.registerHelper('eq', function (arg, value, options) {
             if (arg === value) {
                 return options.fn(this);
@@ -405,15 +478,28 @@ class StaffServiceEmails {
             return array.slice(0,limit);
         });
 
+        this.Handlebars.registerHelper('encodeURIComponent', function (string) {
+            return encodeURIComponent(string);
+        });
+    }
+
+    async renderHTML(templateName, data) {
+        const htmlTemplateSource = await fs.readFile(path.join(__dirname, './email-templates/', `${templateName}.hbs`), 'utf8');
+        const htmlTemplate = this.Handlebars.compile(Buffer.from(htmlTemplateSource).toString());
+
         let sharedData = {};
         if (data.recipient) {
             sharedData = await this.getSharedData(data.recipient);
         }
 
-        return htmlTemplate({
+        const html = htmlTemplate({
             ...data,
             ...sharedData
         });
+
+        const juice = require('juice');
+
+        return juice(html, {inlinePseudoElements: true, removeStyleTags: true});
     }
 
     async renderText(templateName, data) {

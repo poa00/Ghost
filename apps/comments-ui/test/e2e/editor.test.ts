@@ -1,7 +1,23 @@
-import {Locator, expect, test} from '@playwright/test';
-import {MockedApi, getHeight, getModifierKey, initialize, selectText, setClipboard} from '../utils/e2e';
+import {MockedApi, getModifierKey, initialize, selectText, setClipboard, waitEditorFocused} from '../utils/e2e';
+import {expect, test} from '@playwright/test';
 
 test.describe('Editor', async () => {
+    test('Editor placeholder shows Start the conversation when no existing comments ', async ({page}) => {
+        const mockedApi = new MockedApi({});
+        mockedApi.setMember({});
+
+        const {frame} = await initialize({
+            mockedApi,
+            page,
+            publication: 'Publisher Weekly'
+        });
+
+        const editor = frame.getByTestId('editor');
+
+        const placeholderElement = editor.locator('[data-placeholder="Start the conversation"]');
+        await expect(placeholderElement).toBeVisible();
+    });
+
     test('Can comment on a post', async ({page}) => {
         const mockedApi = new MockedApi({});
         mockedApi.setMember({});
@@ -22,15 +38,14 @@ test.describe('Editor', async () => {
         await expect(frame.getByTestId('count')).toHaveText('1 comment');
 
         const editor = frame.getByTestId('form-editor');
-        const editorHeight = await getHeight(editor);
 
         await editor.click({force: true});
 
+        // Wait for focused
+        await waitEditorFocused(editor);
+
         // Wait for animation to finish
         await page.waitForTimeout(200);
-        const newEditorHeight = await getHeight(editor);
-
-        expect(newEditorHeight).toBeGreaterThan(editorHeight);
 
         // Type in the editor
         await editor.type('Newly added comment');
@@ -54,25 +69,13 @@ test.describe('Editor', async () => {
         const mockedApi = new MockedApi({});
         mockedApi.setMember({});
 
-        const {frame} = await initialize({
-            mockedApi,
-            page,
-            publication: 'Publisher Weekly'
-        });
-
-        const editor = frame.getByTestId('form-editor');
-        const editorHeight = await getHeight(editor);
-
         await page.keyboard.press('c');
 
         // Wait for animation to finish
         await page.waitForTimeout(200);
-        const newEditorHeight = await getHeight(editor);
-
-        expect(newEditorHeight).toBeGreaterThan(editorHeight);
     });
 
-    test('Can use CMD+ENTER to submmit', async ({page}) => {
+    test('Can use CMD+ENTER to submit', async ({page}) => {
         const mockedApi = new MockedApi({});
         mockedApi.setMember({});
 
@@ -92,15 +95,13 @@ test.describe('Editor', async () => {
         await expect(frame.getByTestId('count')).toHaveText('1 comment');
 
         const editor = frame.getByTestId('form-editor');
-        const editorHeight = await getHeight(editor);
 
         await editor.click({force: true});
+        // Wait for focused
+        await waitEditorFocused(editor);
 
         // Wait for animation to finish
         await page.waitForTimeout(200);
-        const newEditorHeight = await getHeight(editor);
-
-        expect(newEditorHeight).toBeGreaterThan(editorHeight);
 
         // Type in the editor
         await editor.type('Newly added comment');
@@ -119,6 +120,45 @@ test.describe('Editor', async () => {
         await expect(frame.getByText('Newly added comment')).toBeVisible();
     });
 
+    test('Start the conversation changes to Join the Discussion if more 0 comments. ', async ({page}) => {
+        const mockedApi = new MockedApi({});
+        mockedApi.setMember({});
+
+        const {frame} = await initialize({
+            mockedApi,
+            page,
+            publication: 'Publisher Weekly'
+        });
+
+        const editor = frame.getByTestId('form-editor');
+
+        const placeholderElement = editor.locator('[data-placeholder="Start the conversation"]');
+        await expect(placeholderElement).toBeVisible();
+
+        await editor.click({force: true});
+
+        // Wait for focused
+        await waitEditorFocused(editor);
+
+        // Wait for animation to finish
+        await page.waitForTimeout(200);
+
+        // Type in the editor
+        await editor.type('Newly added comment');
+
+        // Post the comment
+        const button = await frame.getByTestId('submit-form-button');
+        await button.click();
+
+        await expect(editor).toHaveText('');
+
+        await expect(frame.getByText('Newly added comment')).toBeVisible();
+
+        const newPlaceholderElement = editor.locator('[data-placeholder="Join the discussion"]');
+
+        await expect(newPlaceholderElement).toBeVisible();
+    });
+
     test.describe('Markdown', () => {
         test('Can use > to type a quote', async ({page}) => {
             const mockedApi = new MockedApi({});
@@ -133,6 +173,9 @@ test.describe('Editor', async () => {
             const editor = frame.getByTestId('form-editor');
 
             await editor.click({force: true});
+
+            // Wait for focused
+            await waitEditorFocused(editor);
 
             // Type in the editor
             await editor.type('> This is a quote');
@@ -169,7 +212,9 @@ test.describe('Editor', async () => {
 
             // Check focused
             const editorEditable = frame.getByTestId('editor');
-            await expect(editorEditable).toBeFocused();
+
+            // Wait for focused
+            await waitEditorFocused(editor);
 
             // Type in the editor
             await editor.type('Click here to go to a new page');
@@ -205,9 +250,10 @@ test.describe('Editor', async () => {
 
             await editor.click({force: true});
 
-            // Check focused
+            // Wait for focused
+            await waitEditorFocused(editor);
+
             const editorEditable = frame.getByTestId('editor');
-            await expect(editorEditable).toBeFocused();
 
             // Type in the editor
             await editor.type('Click here to go to a new page');
@@ -243,9 +289,10 @@ test.describe('Editor', async () => {
 
             await editor.click({force: true});
 
-            // Check focused
+            // Wait for focused
+            await waitEditorFocused(editor);
+
             const editorEditable = frame.getByTestId('editor');
-            await expect(editorEditable).toBeFocused();
 
             // Type in the editor
             await editor.type('Click here to go to a new page');
@@ -280,9 +327,8 @@ test.describe('Editor', async () => {
 
             await editor.click({force: true});
 
-            // Check focused
-            const editorEditable = frame.getByTestId('editor');
-            await expect(editorEditable).toBeFocused();
+            // Wait for focused
+            await waitEditorFocused(editor);
 
             // Type in the editor
             await editor.type('This is line 1');

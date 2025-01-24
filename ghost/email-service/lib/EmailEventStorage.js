@@ -5,33 +5,47 @@ class EmailEventStorage {
     #db;
     #membersRepository;
     #models;
+    #emailSuppressionList;
+    #prometheusClient;
 
-    constructor({db, models, membersRepository}) {
+    constructor({db, models, membersRepository, emailSuppressionList, prometheusClient}) {
         this.#db = db;
         this.#models = models;
         this.#membersRepository = membersRepository;
+        this.#emailSuppressionList = emailSuppressionList;
+        this.#prometheusClient = prometheusClient;
+
+        if (this.#prometheusClient) {
+            this.#prometheusClient.registerCounter({
+                name: 'email_analytics_events_stored',
+                help: 'Number of email analytics events stored',
+                labelNames: ['event']
+            });
+        }
     }
 
     async handleDelivered(event) {
         // To properly handle events that are received out of order (this happens because of polling)
         // only set if delivered_at is null
-        await this.#db.knex('email_recipients')
+        const rowCount = await this.#db.knex('email_recipients')
             .where('id', '=', event.emailRecipientId)
             .whereNull('delivered_at')
             .update({
                 delivered_at: moment.utc(event.timestamp).format('YYYY-MM-DD HH:mm:ss')
             });
+        this.recordEventStored('delivered', rowCount);
     }
 
     async handleOpened(event) {
         // To properly handle events that are received out of order (this happens because of polling)
         // only set if opened_at is null
-        await this.#db.knex('email_recipients')
+        const rowCount = await this.#db.knex('email_recipients')
             .where('id', '=', event.emailRecipientId)
             .whereNull('opened_at')
             .update({
                 opened_at: moment.utc(event.timestamp).format('YYYY-MM-DD HH:mm:ss')
             });
+        this.recordEventStored('opened', rowCount);
     }
 
     async handlePermanentFailed(event) {
@@ -111,7 +125,16 @@ class EmailEventStorage {
     }
 
     async handleUnsubscribed(event) {
-        return this.unsubscribeFromNewsletters(event);
+        try {
+            // Unsubscribe member from the specific newsletter
+            const newsletters = await this.findNewslettersToKeep(event);
+            await this.#membersRepository.update({newsletters}, {id: event.memberId});
+
+            // Remove member from Mailgun's suppression list
+            await this.#emailSuppressionList.removeUnsubscribe(event.email);
+        } catch (err) {
+            logging.error(err);
+        }
     }
 
     async handleComplained(event) {
@@ -128,11 +151,35 @@ class EmailEventStorage {
         }
     }
 
-    async unsubscribeFromNewsletters(event) {
+    async findNewslettersToKeep(event) {
         try {
-            await this.#membersRepository.update({newsletters: []}, {id: event.memberId});
+            const member = await this.#membersRepository.get({email: event.email}, {
+                withRelated: ['newsletters']
+            });
+            const existingNewsletters = member.related('newsletters');
+
+            const email = await this.#models.Email.findOne({id: event.emailId});
+            const newsletterToRemove = email.get('newsletter_id');
+
+            return existingNewsletters.models.filter(newsletter => newsletter.id !== newsletterToRemove).map((n) => {
+                return {id: n.id};
+            });
         } catch (err) {
             logging.error(err);
+            return [];
+        }
+    }
+
+    /**
+     * Record event stored
+     * @param {string} event
+     * @param {number} count
+     */
+    recordEventStored(event, count = 1) {
+        try {
+            this.#prometheusClient?.getMetric('email_analytics_events_stored')?.inc({event}, count);
+        } catch (err) {
+            logging.error('Error recording email analytics event stored', err);
         }
     }
 }

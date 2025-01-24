@@ -1,9 +1,27 @@
-const _ = require('lodash');
 const nql = require('@tryghost/nql');
 const debug = require('@tryghost/debug')('services:url:generator');
 const localUtils = require('../../../shared/url-utils');
 
-const {posts: postExpansions} = require('@tryghost/nql-filter-expansions');
+// @TODO: merge with filter plugin
+const EXPANSIONS = [{
+    key: 'author',
+    replacement: 'authors.slug'
+}, {
+    key: 'tags',
+    replacement: 'tags.slug'
+}, {
+    key: 'tag',
+    replacement: 'tags.slug'
+}, {
+    key: 'authors',
+    replacement: 'authors.slug'
+}, {
+    key: 'primary_tag',
+    replacement: 'primary_tag.slug'
+}, {
+    key: 'primary_author',
+    replacement: 'primary_author.slug'
+}];
 
 /**
  * The UrlGenerator class is responsible to generate urls based on a router's conditions.
@@ -38,7 +56,7 @@ class UrlGenerator {
         if (filter) {
             this.filter = filter;
             this.nql = nql(this.filter, {
-                expansions: postExpansions,
+                expansions: EXPANSIONS,
                 transformer: nql.utils.mapKeyValues({
                     key: {
                         from: 'page',
@@ -102,16 +120,14 @@ class UrlGenerator {
      * @private
      */
     _onInit() {
-        debug('_onInit', this.resourceType);
-
         // @NOTE: get the resources of my type e.g. posts.
         const resources = this.resources.getAllByType(this.resourceType);
 
-        debug(resources.length);
+        debug('_onInit', this.resourceType, resources.length);
 
-        _.each(resources, (resource) => {
+        for (const resource of resources) {
             this._try(resource);
-        });
+        }
     }
 
     /**
@@ -122,7 +138,7 @@ class UrlGenerator {
      * @private
      */
     _onAdded(event) {
-        debug('onAdded', this.toString());
+        debug('_onAdded', this.toString());
 
         // CASE: you are type "pages", but the incoming type is "users"
         if (event.type !== this.resourceType) {
@@ -130,7 +146,6 @@ class UrlGenerator {
         }
 
         const resource = this.resources.getByIdAndType(event.type, event.id);
-
         this._try(resource);
     }
 
@@ -151,11 +166,10 @@ class UrlGenerator {
             return false;
         }
 
-        const url = this._generateUrl(resource);
-
         // CASE 1: route has no custom filter, it will own the resource for sure
         // CASE 2: find out if my filter matches the resource
         if ((!this.filter) || (this.nql.queryJSON(resource.data))) {
+            const url = this._generateUrl(resource);
             this.urls.add({
                 url: url,
                 generatorId: this.uid,

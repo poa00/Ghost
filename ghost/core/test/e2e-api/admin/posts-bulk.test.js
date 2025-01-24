@@ -1,4 +1,6 @@
+const should = require('should');
 const DomainEvents = require('@tryghost/domain-events');
+const {mobiledocToLexical} = require('@tryghost/kg-converters');
 const {agentProvider, fixtureManager, mockManager} = require('../../utils/e2e-framework');
 const models = require('../../../core/server/models');
 const assert = require('assert/strict');
@@ -7,15 +9,26 @@ describe('Posts Bulk API', function () {
     let agent;
 
     before(async function () {
-        mockManager.mockLabsEnabled('collections');
+        mockManager.mockLabsEnabled('collectionsCard');
+
         agent = await agentProvider.getAdminAPIAgent();
 
         // Note that we generate lots of fixtures here to test the bulk deletion correctly
         await fixtureManager.init('posts', 'newsletters', 'members:newsletters', 'emails', 'redirects', 'clicks', 'comments', 'feedback', 'links', 'mentions');
         await agent.loginAsOwner();
+
+        // convert inserted pages to lexical so we can test page.html reset/re-render
+        const pages = await models.Post.where('type', 'page').fetchAll();
+        for (const page of pages) {
+            const lexical = mobiledocToLexical(page.get('mobiledoc'));
+            await models.Base.knex.raw('UPDATE posts SET mobiledoc=NULL, lexical=? where id=?', [lexical, page.id]);
+        }
     });
 
-    afterEach(function () {
+    afterEach(async function () {
+        // give pages some HTML back to alleviate test interdependence when pages are reset on create/update/delete
+        await models.Base.knex.raw('UPDATE posts SET html = "<p>Testing</p>" WHERE type = \'page\' AND html IS NULL');
+
         mockManager.restore();
     });
 
@@ -28,10 +41,6 @@ describe('Posts Bulk API', function () {
             const amount = changedPosts.meta.pagination.total;
 
             assert(amount > 0, 'Expect at least one post to be affected for this test to work');
-
-            let featuredCollection = await models.Collection.findPage({filter: 'slug:featured', limit: 1, withRelated: ['posts']});
-            let featuredCollectionPostsAmount = featuredCollection.data[0].toJSON().posts.length;
-            assert(featuredCollectionPostsAmount > 0, 'Expect to have multiple featured collection posts');
 
             const response = await agent
                 .put('/posts/bulk/?filter=' + encodeURIComponent(filter))
@@ -47,13 +56,16 @@ describe('Posts Bulk API', function () {
 
             assert.equal(response.body.bulk.meta.stats.successful, amount, `Expect all matching posts (${amount}) to be changed`);
 
+            // Check page HTML was reset to enable re-render of collection cards
+            // Must be done before fetch all posts otherwise they will be re-rendered
+            const totalPageCount = await models.Post.where({type: 'page'}).count();
+            const emptyPageCount = await models.Post.where({html: null, type: 'page'}).count();
+            should.exist(emptyPageCount);
+            emptyPageCount.should.equal(totalPageCount, 'no. of render-queued pages after bulk edit');
+
             // Fetch all posts and check if they are featured
             const posts = await models.Post.findAll({filter, status: 'all'});
             assert.equal(posts.length, amount, `Expect all matching posts (${amount}) to be changed`);
-
-            featuredCollection = await models.Collection.findPage({filter: 'slug:featured', limit: 1, withRelated: ['posts']});
-            featuredCollectionPostsAmount = featuredCollection.data[0].toJSON().posts.length;
-            assert.equal(featuredCollectionPostsAmount, amount, 'Expect to have same amount featured collection posts as changed');
 
             for (const post of posts) {
                 assert(post.get('featured') === true, `Expect post ${post.id} to be featured`);
@@ -68,10 +80,6 @@ describe('Posts Bulk API', function () {
             const amount = changedPosts.meta.pagination.total;
 
             assert(amount > 0, 'Expect at least one post to be affected for this test to work');
-
-            let featuredCollection = await models.Collection.findPage({filter: 'slug:featured', limit: 1, withRelated: ['posts']});
-            let featuredCollectionPostsAmount = featuredCollection.data[0].toJSON().posts.length;
-            assert(featuredCollectionPostsAmount > 0, 'Expect to have multiple featured collection posts');
 
             const response = await agent
                 .put('/posts/bulk/?filter=' + encodeURIComponent(filter))
@@ -90,10 +98,6 @@ describe('Posts Bulk API', function () {
             // Fetch all posts and check if they are featured
             const posts = await models.Post.findAll({filter, status: 'all'});
             assert.equal(posts.length, amount, `Expect all matching posts (${amount}) to be changed`);
-
-            featuredCollection = await models.Collection.findPage({filter: 'slug:featured', limit: 1, withRelated: ['posts']});
-            featuredCollectionPostsAmount = featuredCollection.data[0].toJSON().posts.length;
-            assert.equal(featuredCollectionPostsAmount, 0, 'Expect to have no featured collection posts');
 
             for (const post of posts) {
                 assert(post.get('featured') === false, `Expect post ${post.id} to be unfeatured`);
@@ -280,7 +284,7 @@ describe('Posts Bulk API', function () {
 
         it('Can unpublish posts', async function () {
             const filter = 'status:[published]';
-            const changedPosts = await models.Post.findPage({filter, limit: 1, status: 'all'});
+            const changedPosts = await models.Post.findPage({filter, status: 'published'});
             const amount = changedPosts.meta.pagination.total;
 
             assert(amount > 0, 'Expect at least one post to be affected for this test to work');
@@ -300,6 +304,10 @@ describe('Posts Bulk API', function () {
             // Fetch all posts and check if they are unpublished
             const posts = await models.Post.findAll({filter, status: 'all'});
             assert.equal(posts.length, 0, `Expect all matching posts (${amount}) to be unpublished`);
+
+            // Re-publish the posts so we don't affect later tests
+            const postIds = changedPosts.data.map(post => post.id);
+            await models.Base.knex.raw(`UPDATE posts SET status = \'published\' WHERE id IN (${postIds.map(() => '?').join(',')})`, [...postIds]);
         });
     });
 
@@ -314,13 +322,6 @@ describe('Posts Bulk API', function () {
 
             assert(amount > 0, 'Expect at least one post to be affected for this test to work');
 
-            await agent
-                .get('posts/?collection=latest')
-                .expectStatus(200)
-                .expect((res) => {
-                    assert(res.body.posts.length > 0, 'Expect latest collection to have some posts');
-                });
-
             const response = await agent
                 .delete('/posts/?filter=' + encodeURIComponent(filter))
                 .expectStatus(200)
@@ -331,6 +332,12 @@ describe('Posts Bulk API', function () {
             // Check if all posts were deleted
             const posts = await models.Post.findPage({filter, status: 'all'});
             assert.equal(posts.meta.pagination.total, 0, `Expect all matching posts (${amount}) to be deleted`);
+
+            // Check page HTML was reset to enable re-render of collection cards
+            const totalPageCount = await models.Post.where({type: 'page'}).count();
+            const emptyPageCount = await models.Post.where({html: null, type: 'page'}).count();
+            should.exist(emptyPageCount);
+            emptyPageCount.should.equal(totalPageCount, 'no. of render-queued pages after bulk delete');
         });
 
         it('Can delete all posts', async function () {

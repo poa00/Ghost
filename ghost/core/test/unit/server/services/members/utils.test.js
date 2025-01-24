@@ -28,6 +28,7 @@ describe('Members Service - utils', function () {
                     suppressed: false,
                     info: null
                 },
+                unsubscribe_url: undefined,
                 created_at: '2020-01-01T00:00:00.000Z'
             });
             should(member1).deepEqual({
@@ -37,6 +38,7 @@ describe('Members Service - utils', function () {
                 expertise: null,
                 firstname: 'Jamie',
                 avatar_image: 'https://gravatar.com/avatar/7d8efd2c2a781111599a8cae293cf704?s=250&d=blank',
+                unsubscribe_url: undefined,
                 subscribed: true,
                 subscriptions: [],
                 paid: false,
@@ -61,6 +63,7 @@ describe('Members Service - utils', function () {
                 extra: 'property',
                 newsletters: [{
                     id: 'newsletter-1',
+                    uuid: 'uuid-1',
                     name: 'Daily brief',
                     description: 'One email daily',
                     sender_name: 'Jamie',
@@ -68,6 +71,7 @@ describe('Members Service - utils', function () {
                     sort_order: 0
                 }],
                 enable_comment_notifications: false,
+                unsubscribe_url: undefined,
                 created_at: '2020-01-01T00:00:00.000Z'
             });
             should(member1).deepEqual({
@@ -82,11 +86,13 @@ describe('Members Service - utils', function () {
                 paid: true,
                 newsletters: [{
                     id: 'newsletter-1',
+                    uuid: 'uuid-1',
                     name: 'Daily brief',
                     description: 'One email daily',
                     sort_order: 0
                 }],
                 enable_comment_notifications: false,
+                unsubscribe_url: undefined,
                 created_at: '2020-01-01T00:00:00.000Z'
             });
         });

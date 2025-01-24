@@ -2,7 +2,7 @@
 const _ = require('lodash');
 const path = require('path');
 const fs = require('fs-extra');
-const uuid = require('uuid');
+const crypto = require('crypto');
 const ObjectId = require('bson-objectid').default;
 const KnexMigrator = require('knex-migrator');
 const {sequence} = require('@tryghost/promise');
@@ -11,7 +11,6 @@ const knexMigrator = new KnexMigrator();
 // Ghost Internals
 const models = require('../../core/server/models');
 const {fixtureManager} = require('../../core/server/data/schema/fixtures');
-const emailAnalyticsService = require('../../core/server/services/email-analytics');
 const permissions = require('../../core/server/services/permissions');
 const settingsService = require('../../core/server/services/settings/settings-service');
 const labsService = require('../../core/shared/labs');
@@ -160,7 +159,7 @@ const fixtures = {
         let i;
 
         for (i = 0; i < max; i += 1) {
-            tagName = uuid.v4().split('-')[0];
+            tagName = crypto.randomUUID().split('-')[0];
             tags.push(DataGenerator.forKnex.createBasic({name: tagName, slug: tagName}));
         }
 
@@ -188,13 +187,15 @@ const fixtures = {
                 throw new Error('Trying to add more posts_tags than the number of posts.');
             }
 
-            return Promise.all(posts.slice(0, max).map((post) => {
-                post.tags = post.tags ? post.tags : [];
+            return models.Base.transaction((transacting) => {
+                return Promise.all(posts.slice(0, max).map((post) => {
+                    post.tags = post.tags ? post.tags : [];
 
-                return models.Post.edit({
-                    tags: post.tags.concat([_.find(DataGenerator.Content.tags, {id: injectionTagId})])
-                }, _.merge({id: post.id}, context.internal));
-            }));
+                    return models.Post.edit({
+                        tags: post.tags.concat([_.find(DataGenerator.Content.tags, {id: injectionTagId})])
+                    }, _.merge({id: post.id, transacting}, context.internal));
+                }));
+            });
         });
     },
 
@@ -425,10 +426,16 @@ const fixtures = {
         }));
     },
 
-    insertWebhook: function (attributes) {
+    insertWebhook: function (attributes, options = {}) {
+        let integration = DataGenerator.forKnex.integrations[0];
+        if (options.integrationType) {
+            integration = DataGenerator.forKnex.integrations.find(
+                props => props.type === options.integrationType
+            );
+        }
         const webhook = DataGenerator.forKnex.createWebhook(
             Object.assign(attributes, {
-                integration_id: DataGenerator.forKnex.integrations[0].id
+                integration_id: integration.id
             })
         );
 
@@ -485,6 +492,13 @@ const fixtures = {
         });
 
         return models.Product.add(hiddenTier, context.internal);
+    },
+
+    insertExtraTiers: async function insertExtraTiers() {
+        const extraTier = DataGenerator.forKnex.createProduct({});
+        const extraTier2 = DataGenerator.forKnex.createProduct({slug: 'silver', name: 'Silver'});
+        await models.Product.add(extraTier, context.internal);
+        await models.Product.add(extraTier2, context.internal);
     },
 
     insertProducts: async function insertProducts() {
@@ -621,6 +635,9 @@ const fixtures = {
     },
 
     insertEmailsAndRecipients: function insertEmailsAndRecipients(withFailed = false) {
+        // NOTE: This require results in the jobs service being loaded prematurely, which breaks any tests relevant to it.
+        //  This MUST be done in here and not at the top of the file to prevent that from happening as test setup is being performed.
+        const emailAnalyticsService = require('../../core/server/services/email-analytics');
         return sequence(_.cloneDeep(DataGenerator.forKnex.emails).map(email => () => {
             return models.Email.add(email, context.internal);
         })).then(function () {
@@ -704,7 +721,10 @@ const fixtures = {
     },
 
     async enableAllLabsFeatures() {
-        const labsValue = Object.fromEntries(labsService.WRITABLE_KEYS_ALLOWLIST.map(key => [key, true]));
+        const labsValue = Object.fromEntries(labsService.WRITABLE_KEYS_ALLOWLIST
+            // TODO: should test with 2fa enabled
+            .filter(key => key !== 'staff2fa')
+            .map(key => [key, true]));
         const labsSetting = DataGenerator.forKnex.createSetting({
             key: 'labs',
             group: 'labs',
@@ -821,6 +841,9 @@ const toDoList = {
     },
     custom_theme_settings: function insertCustomThemeSettings() {
         return fixtures.insertCustomThemeSettings();
+    },
+    'tiers:extra': function insertExtraTiers() {
+        return fixtures.insertExtraTiers();
     },
     'tiers:archived': function insertArchivedTiers() {
         return fixtures.insertArchivedTiers();

@@ -1,15 +1,18 @@
 const _ = require('lodash');
 const tpl = require('@tryghost/tpl');
-const {NotFoundError, NoPermissionError, BadRequestError, IncorrectUsageError} = require('@tryghost/errors');
+const {NotFoundError, NoPermissionError, BadRequestError, IncorrectUsageError, ValidationError} = require('@tryghost/errors');
 const {obfuscatedSetting, isSecretSetting, hideValueIfSecret} = require('./settings-utils');
 const logging = require('@tryghost/logging');
 const MagicLink = require('@tryghost/magic-link');
 const verifyEmailTemplate = require('./emails/verify-email');
+const sentry = require('../../../shared/sentry');
+const config = require('../../../shared/config');
 
 const EMAIL_KEYS = ['members_support_address'];
 const messages = {
     problemFindingSetting: 'Problem finding setting: {key}',
-    accessCoreSettingFromExtReq: 'Attempted to access core setting from external request'
+    accessCoreSettingFromExtReq: 'Attempted to access core setting from external request',
+    invalidEmail: 'Invalid email address'
 };
 
 class SettingsBREADService {
@@ -22,11 +25,13 @@ class SettingsBREADService {
      * @param {Object} options.singleUseTokenProvider
      * @param {Object} options.urlUtils
      * @param {Object} options.labsService - labs service instance
+     * @param {{service: Object}} options.emailAddressService
      */
-    constructor({SettingsModel, settingsCache, labsService, mail, singleUseTokenProvider, urlUtils}) {
+    constructor({SettingsModel, settingsCache, labsService, mail, singleUseTokenProvider, urlUtils, emailAddressService}) {
         this.SettingsModel = SettingsModel;
         this.settingsCache = settingsCache;
         this.labs = labsService;
+        this.emailAddressService = emailAddressService;
 
         /* email verification setup */
 
@@ -65,7 +70,8 @@ class SettingsBREADService {
                 // @todo: need to make this more generic?
                 const adminUrl = urlUtils.urlFor('admin', true);
                 const signinURL = new URL(adminUrl);
-                signinURL.hash = `/settings/members/?verifyEmail=${token}`;
+                signinURL.hash = `/settings/portal/edit?verifyEmail=${token}`;
+
                 return signinURL.href;
             }
         };
@@ -76,7 +82,9 @@ class SettingsBREADService {
             getSigninURL,
             getText,
             getHTML,
-            getSubject
+            getSubject,
+            sentry,
+            config
         });
     }
 
@@ -147,7 +155,7 @@ class SettingsBREADService {
      * @param {Object[]} settings
      * @param {Object} options
      * @param {Object} [options.context]
-     * @param {Object} [stripeConnectData]
+     * @param {Object|null} [stripeConnectData]
      * @returns
      */
     async edit(settings, options, stripeConnectData) {
@@ -221,21 +229,6 @@ class SettingsBREADService {
         const {filteredSettings: refilteredSettings, emailsToVerify} = await this.prepSettingsForEmailVerification(filteredSettings, getSetting);
 
         const modelArray = await this.SettingsModel.edit(refilteredSettings, options).then((result) => {
-            // TODO: temporary fix for starting/stopping lexicalMultiplayer service when labs flag is changed
-            //       this should be removed along with the flag, or set up in a more generic way
-            const labsSetting = result.find(setting => setting.get('key') === 'labs');
-            if (labsSetting) {
-                const lexicalMultiplayer = require('../lexical-multiplayer');
-                const previous = JSON.parse(labsSetting.previousAttributes().value);
-                const current = JSON.parse(labsSetting.get('value'));
-
-                if (!previous.lexicalMultiplayer && current.lexicalMultiplayer) {
-                    lexicalMultiplayer.enable();
-                } else if (previous.lexicalMultiplayer && !current.lexicalMultiplayer) {
-                    lexicalMultiplayer.disable();
-                }
-            }
-
             return this._formatBrowse(_.keyBy(_.invokeMap(result, 'toJSON'), 'key'), options.context);
         });
 
@@ -322,7 +315,18 @@ class SettingsBREADService {
                 const hasChanged = getSetting(setting).value !== email;
 
                 if (await this.requiresEmailVerification({email, hasChanged})) {
-                    emailsToVerify.push({email, key});
+                    const validated = this.emailAddressService.service.validate(email, 'replyTo');
+                    if (!validated.allowed) {
+                        throw new ValidationError({
+                            message: messages.invalidEmail
+                        });
+                    }
+
+                    if (validated.verificationEmailRequired) {
+                        emailsToVerify.push({email, key});
+                    } else {
+                        filteredSettings.push(setting);
+                    }
                 } else {
                     filteredSettings.push(setting);
                 }
@@ -367,13 +371,7 @@ class SettingsBREADService {
      * @private
      */
     async sendEmailVerificationMagicLink({email, key}) {
-        const [,toDomain] = email.split('@');
-
-        let fromEmail = `noreply@${toDomain}`;
-        if (fromEmail === email) {
-            fromEmail = `no-reply@${toDomain}`;
-        }
-
+        const fromEmail = this.emailAddressService.service.defaultFromAddress;
         const {ghostMailer} = this;
 
         this.magicLinkService.transporter = {

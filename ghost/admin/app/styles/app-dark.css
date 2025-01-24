@@ -32,7 +32,6 @@
 @import "components/power-select.css";
 @import "components/power-calendar.css";
 @import "components/koenig.css";
-@import "components/koenig-dark.css";
 @import "components/publishmenu.css";
 @import "components/popovers.css";
 @import "components/unsplash.css";
@@ -43,6 +42,8 @@
 @import "components/stacks.css";
 @import "components/browser-preview.css";
 @import "components/filter-builder.css";
+@import "components/theme-errors.css";
+@import "components/modal-about.css";
 
 
 /* Layouts
@@ -52,19 +53,13 @@
 @import "layouts/auth.css";
 @import "layouts/content.css";
 @import "layouts/editor.css";
-@import "layouts/settings.css";
-@import "layouts/users.css";
-@import "layouts/user.css";
 @import "layouts/whatsnew.css";
+@import "layouts/whatsnew-modal.css";
 @import "layouts/tags.css";
 @import "layouts/members.css";
 @import "layouts/member-activity.css";
 @import "layouts/error.css";
-@import "layouts/apps.css";
-@import "layouts/packages.css";
-@import "layouts/labs.css";
 @import "layouts/preview-email.css";
-@import "layouts/portal-settings.css";
 @import "layouts/billing.css";
 @import "layouts/post-history.css";
 @import "layouts/post-preview.css";
@@ -89,6 +84,7 @@
 
     --main-bg-color: #15171A;
     --dark-main-bg-color: #15171A;
+    --nav-bg-color: #101114;
     --hairline-color-1: #22252A;
     --hairline-color-2: #5E6874;
 
@@ -113,11 +109,7 @@ input,
 .gh-input,
 .gh-select,
 .for-switch .input-toggle-component,
-.gh-select select,
-.settings-menu-container:not(.ember-power-select-multiple-trigger):not(.tag-settings) input:not([disabled]),
-.settings-menu-container:not(.tag-settings) .gh-input:not([disabled]),
-.settings-menu-pane .gh-date-time-picker-date,
-.settings-menu-pane .gh-date-time-picker-time {
+.gh-select select {
     color: var(--darkgrey);
     border-color: color-mod(var(--lightgrey));
     background: color-mod(var(--lightgrey));
@@ -176,11 +168,11 @@ input:focus,
 
 @media (max-width: 800px) {
     .gh-mobile-nav-bar {
-        background: #191b1f;
+        background: var(--nav-bg-color);
     }
 
     .gh-mobile-nav-bar a.active {
-        background: #111213;
+        background: var(--whitegrey-l2);
         color: #fff;
     }
 }
@@ -193,6 +185,11 @@ input:focus,
 .ember-power-select-multiple-trigger {
     border-color: color-mod(var(--lightgrey));
     background: color-mod(var(--lightgrey));
+}
+
+.ember-power-select-multiple-remove-btn svg path {
+    stroke: var(--grey-100);
+    fill: var(--grey-100);
 }
 
 .ember-power-select-dropdown {
@@ -237,13 +234,12 @@ input:focus,
 }
 
 .gh-main:not(.gh-main-white),
-.gh-nav,
 .gh-unsplash-window {
     background: var(--dark-main-bg-color);
 }
 
 .gh-image-uploader-unsplash {
-    filter: invert(100%);
+    color: var(--grey-400);
 }
 
 /* Buttons
@@ -263,8 +259,8 @@ input:focus,
     background: var(--black) !important;
 }
 
-.gh-btn:not(.gh-btn-green):not(.gh-btn-blue):not(.gh-btn-red):not(.gh-btn-primary):not(.gh-btn-black):not(.gh-btn-text):not(.gh-btn-accent):not(.gh-btn-link):not(.gh-editor-preview-trigger) {
-    background: var(--lightgrey);
+.gh-btn:not(.gh-btn-green):not(.gh-btn-blue):not(.gh-btn-red):not(.gh-btn-primary):not(.gh-btn-black):not(.gh-btn-text):not(.gh-btn-accent):not(.gh-btn-link):not(.gh-editor-preview-trigger):not(.gh-expandable-header .gh-btn):not(.gh-btn.gh-post-preview-mode) {
+    border: 1px solid var(--grey-900);
     color: var(--black);
 }
 
@@ -361,28 +357,22 @@ input:focus,
     background-color: rgba(0,0,0,0.3);
 }
 
-.email-cta-toolbar,
-.email-cta-toolbar .borders,
-.email-cta-toolbar .email-cta-align {
-    border-color: var(--lightgrey);
-}
-
-.email-cta-toolbar .gh-btn {
-    background: var(--dark-main-bg-color) !important;
-}
-
 .gh-badge-black,
 .gh-badge.owner {
     color: var(--lightgrey);
 }
 
-.nav-list {
+.nav-list:not(.settings-menu .nav-list) {
     border-color: var(--lightgrey);
     background: var(--lightgrey);
 }
 
 .nav-list-item:hover {
     background: var(--lightgrey-l1);
+}
+
+.nav-list-item-twitter button svg path {
+    stroke: var(--black);
 }
 
 .gh-select select {
@@ -533,16 +523,11 @@ input:focus,
     color: var(--midgrey);
 }
 
-.gh-markdown-editor .CodeMirror-cursor {
-    border-color: #fff;
-}
-
 .koenig-card-html--editor .CodeMirror-cursor {
     border-color: #fff;
 }
 
 .gh-about-logo svg,
-.apps-card-app-orb,
 .gh-nav-logo-default,
 .gh-unsplash-logo {
     filter: invert(100%) brightness(150%);
@@ -566,10 +551,6 @@ input:focus,
 
 .gh-loading-spinner:before {
     background: #fff;
-}
-
-.user-cover-edit {
-    color: #fff;
 }
 
 .gh-unsplash-search:focus {
@@ -598,33 +579,6 @@ input:focus,
     color: var(--darkgrey);
 }
 
-.apps-grid,
-.apps-grid-cell {
-    background: var(--dark-main-bg-color);
-}
-
-.td-item-overlay:hover,
-.td-item-overlay:focus {
-    background-color: var(--black-90);
-}
-
-.td-item-empty {
-    background: var(--whitegrey-l1);
-}
-
-.gh-themes-container {
-    background: var(--whitegrey-l2);
-}
-
-.gh-themes-container .apps-grid {
-    background: none;
-}
-
-.gh-theme-directory-footer {
-    color: var(--darkgrey);
-    background-color: var(--whitegrey);
-}
-
 .settings-code-editor .CodeMirror-gutters,
 .settings-code code,
 .form-group code {
@@ -637,6 +591,10 @@ input:focus,
     border: 1px solid var(--lightgrey);
 }
 
+.for-switch .input-toggle-component {
+    background: var(--grey-800);
+}
+
 .for-switch input:checked+.input-toggle-component {
     background: var(--green);
 }
@@ -647,26 +605,6 @@ input:focus,
 
 .settings-code-editor .CodeMirror-cursor {
     border-color: var(--midgrey);
-}
-
-.gh-branding-settings-right {
-    background: var(--dark-main-bg-color);
-}
-
-.gh-branding-settings-header {
-    border-bottom: 1px solid var(--hairline-color-1);
-}
-
-.gh-branding-settings-options {
-    border-right: 1px solid var(--hairline-color-1);
-}
-
-.gh-branding-image-container.transparent-bg {
-    background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3ERectangle%3C/title%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cpath fill='%23303e46' d='M0 0h24v24H0z'/%3E%3Cpath fill='%233e515b' d='M0 0h12v12H0zM12 12h12v12H12z'/%3E%3C/g%3E%3C/svg%3E");
-}
-
-.id-item {
-    background: var(--dark-main-bg-color);
 }
 
 .CodeMirror .cm-spell-error:not(.cm-url):not(.cm-comment):not(.cm-tag):not(.cm-word) {
@@ -693,24 +631,39 @@ input:focus,
     color: color-mod(#5A5CAD l(+20%));
 }
 
-.id-github img,
-.id-typeform img,
-.id-buffer img,
-.id-unsplash,
-.id-more img {
-    filter: invert(100%);
-}
-
 .dark-no-shadow {
     box-shadow: none;
 }
 
 .gh-nav {
-    border-color: var(--hairline-color-1);
+    background: var(--nav-bg-color);
+}
+
+.gh-nav-hidden {
+    background: var(--main-bg-color);
+}
+
+.gh-nav-hidden:hover,
+.mobile-menu-expanded .gh-nav {
+    box-shadow:
+        100px 0px 80px 0px rgba(0, 0, 0, 0.06),
+        41.78px 0px 33.422px 0px rgba(0, 0, 0, 0.05),
+        22.34px 0px 17.869px 0px rgba(0, 0, 0, 0.05),
+        12.52px 0px 10.017px 0px rgba(0, 0, 0, 0.05),
+        6.65px 0px 5.32px 0px rgba(0, 0, 0, 0.05),
+        2.77px 0px 2.214px 0px rgba(0, 0, 0, 0.05);
 }
 
 .gh-nav-list a {
     color: color-mod(var(--middarkgrey-d1));
+}
+
+.gh-nav-list a:hover {
+    background: var(--whitegrey-l2);
+}
+
+.gh-nav-list .active {
+    background: var(--whitegrey-l2);
 }
 
 .gh-nav-list a:not(.active):not(.gh-secondary-action):hover,
@@ -725,60 +678,32 @@ input:focus,
     background: var(--whitegrey);
 }
 
-.gh-nav-list a:not(.active):not(.gh-secondary-action):hover {
-    background: var(--whitegrey);
+.gh-nav-list a:not(.active):not(.gh-secondary-action):hover,
+.gh-nav-menu-dropdown .dropdown-menu>li>a:hover, .gh-nav-menu-dropdown .dropdown-menu>li>button:hover {
+    background: var(--whitegrey-l2);
 }
 
 .gh-nav-btn-search:hover {
     background: var(--lightgrey);
 }
 
-.apps-grid-cell:hover {
-    background: var(--whitegrey);
-}
-
-.apps-card-app {
-    border-bottom: var(--hairline-color-1) 1px solid;
-}
-
-.apps-card-app-icon {
-    mix-blend-mode: normal;
-}
-
-.apps-card-app-icon.id-typeform {
-    filter: invert(100%);
-}
-
-.gh-nav,
 .gh-contentfilter-menu-trigger,
 .gh-contentfilter-menu-trigger--active,
 .gh-contentfilter-menu-trigger:focus,
 .tags-container,
-.content-list ol,
-.gh-settings-main-grid {
+.content-list ol {
     background: var(--dark-main-bg-color);
 }
 
-.gh-posts-list-item:hover,
+.gh-posts-list-item-group,
+.gh-list-scrolling tbody .gh-list-data,
+.gh-list-scrolling thead th {
+    border-color: var(--lightgrey);
+}
+
 .ember-power-select-group .ember-power-select-option[aria-current=true],
 .settings-tag .tag-edit-button.active,
 .gh-portal-site-frame-cover {
-    background: var(--whitegrey);
-}
-
-.gh-list-row:not(.loading):hover .gh-list-data:first-of-type {
-    background: linear-gradient(315deg, var(--whitegrey) 60%, var(--white) 100%);
-}
-
-.gh-list-row:not(.loading):hover .gh-list-data:not(:first-of-type) {
-    background: var(--whitegrey);
-}
-
-.gh-list-scrolling tbody tr:hover > a:first-of-type {
-    background: linear-gradient(315deg, var(--whitegrey) 60%, var(--white) 100%);
-}
-
-.gh-list-scrolling tbody tr:hover > a:not(:first-of-type) {
     background: var(--whitegrey);
 }
 
@@ -803,20 +728,12 @@ input:focus,
     background-color: transparent;
 }
 
-.gh-setting-header {
-    border-color: var(--hairline-color-1);
-}
-
-.gh-settings-main-grid .gh-setting-group span {
-    background: color-mod(var(--dark-main-bg-color) l(+2%));
-}
-
 .gh-referral-toast-close:hover {
     color: #fff;
 }
 
 .nightshift-toggle {
-    background: var(--lightgrey);
+    background: var(--grey-800);
 }
 
 .nightshift-toggle .thumb {
@@ -833,68 +750,26 @@ input:focus,
 
 .gh-tag-setting-codeinjection .CodeMirror {
     background: var(--dark-main-bg-color);
+    border: 1px solid var(--grey-800);
 }
 
 .gh-tag-setting-codeinjection .CodeMirror-gutters {
     background-color: var(--whitegrey);
-    border-right: 1px solid var(--lightgrey);
+    border-right: 1px solid var(--grey-800);
 }
 
 /* Koenig styles */
-.kg-link-input {
-    border-color: var(--green) !important;
-}
-
-.kg-settings-panel {
-    background-color: var(--lightgrey-d1);
-    box-shadow:
-        0px -1px 10px rgba(0, 0, 0, 0.1),
-        0px 2.8px 2.2px rgba(0, 0, 0, 0.05),
-        0px 6.7px 5.3px rgba(0, 0, 0, 0.05),
-        0px 12.5px 10px rgba(0, 0, 0, 0.08),
-        0px 22.3px 17.9px rgba(0, 0, 0, 0.08),
-        0px 41.8px 33.4px rgba(0, 0, 0, 0.08),
-        0px 100px 80px rgba(0, 0, 0, 0.1)
-    ;
-}
-
-.kg-settings-panel .for-switch .input-toggle-component {
-    background: var(--lightgrey-l2);
-}
-
-.kg-settings-panel .gh-btn-group {
-    background: var(--lightgrey);
-}
-
-.kg-settings-panel .gh-btn-group .gh-btn-group-selected span {
-    background: var(--lightgrey-l2) !important;
-}
-
-.kg-settings-panel .kg-upload-thumbnail-xl:hover {
-    background: var(--lightgrey) !important;
-}
-
-.emoji-picker__emoji:hover {
-    background: var(--lightgrey) !important;
-}
-
-.kg-upload-title {
-    background: transparent;
-}
-
-.kg-upload-button .kg-audio-icon {
-    fill: var(--black);
-}
-
-.kg-video-thumbnail-xl-container {
-    background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3ERectangle%3C/title%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cpath fill='%23303e46' d='M0 0h24v24H0z'/%3E%3Cpath fill='%233e515b' d='M0 0h12v12H0zM12 12h12v12H12z'/%3E%3C/g%3E%3C/svg%3E");
-}
 
 .image-overlay button {
     background: var(--whitegrey);
 }
 
 /* Editor  */
+
+.gh-editor-title,
+.gh-editor-excerpt {
+    background: var(--white);
+}
 
 .gh-editor-title::placeholder {
     color: var(--midlightgrey-d2);
@@ -933,6 +808,10 @@ input:focus,
     fill: var(--darkgrey);
 }
 
+.gh-editor-feature-image-caption {
+    color: var(--darkgrey);
+}
+
 .gh-editor-wordcount-container {
     background: var(--white);
 }
@@ -969,12 +848,6 @@ input:focus,
     background: var(--dark-main-bg-color) !important;
 }
 
-.gh-list-header,
-.gh-list-row:not(.header):hover .gh-list-cell,
-.gh-list-row:not(.header):hover .gh-list-data {
-    background: var(--dark-main-bg-color);
-}
-
 .gh-list-header {
     border-bottom: 1px solid var(--hairline-color-1);
 }
@@ -984,7 +857,6 @@ input:focus,
 }
 
 .gh-post-list-cta {
-    background: #26282b;
     color: #ffffff;
     border-color: #33373d;
 }
@@ -1014,6 +886,10 @@ input:focus,
 }
 
 /* Members */
+.members-header .view-actions input.gh-members-list-searchfield {
+    border-color: var(--lightgrey)
+}
+
 .gh-members-help-card,
 .gh-offers-help-card {
     background: var(--dark-main-bg-color);
@@ -1038,7 +914,6 @@ input:focus,
     background: none !important;
 }
 
-.modal-fullsettings-preview-container,
 .fullscreen-modal-email-preview .gh-pe-mobile-container,
 .fullscreen-modal-email-preview .gh-pe-desktop-container{
     background: var(--dark-main-bg-color);
@@ -1048,10 +923,6 @@ input:focus,
 .gh-post-preview-email-container,
 .gh-post-preview-social-container {
     background: transparent;
-}
-
-.modal-fullsettings-main {
-    border-left: 1px solid var(--hairline-color-1);
 }
 
 .gh-pe-mobile-bezel {
@@ -1066,16 +937,27 @@ input:focus,
     border: 1px solid var(--hairline-color-1);
 }
 
-.gh-members-connect-testmodelabel {
-    background: #983705;
-    color: #f8e5b9;
-}
-
 .members-list .gh-list-header {
     background: var(--dark-main-bg-color);
 }
 
 /* Members activity */
+.gh-member-newsletter-row {
+    border-bottom: 1px solid var(--grey-900);
+}
+
+.gh-members-no-data .lightgrey {
+    color: var(--grey-600);
+}
+
+.gh-cp-membertier-attribution .gh-tier-card-price {
+    background: var(--grey-900);
+}
+
+.gh-cp-membertier-attribution .gh-tier-card-header:not(:first-child) {
+    border-top: 1px solid var(--grey-900);
+}
+
 .gh-members-activity-icon svg path,
 .gh-member-feed-icon svg path {
     stroke: #fff;
@@ -1086,7 +968,7 @@ input:focus,
 }
 
 .gh-member-feed-row {
-    border-bottom: 1px solid var(--lightgrey-l1);
+    border-bottom: 1px solid var(--grey-900);
 }
 
 .ghost-members-activity-event-prefix,
@@ -1138,7 +1020,7 @@ input:focus,
 
 /* Member */
 .gh-cp-membertier-attribution .gh-membertier-advanced {
-    border-top: 1px solid rgb(23, 25, 28);
+    border-top: 1px solid var(--grey-900);
 }
 
 .gh-dashboard-metric.is-embedded {
@@ -1190,13 +1072,13 @@ input:focus,
     background: var(--lightgrey);
 }
 
-/* Opacity needed to display correctly in Safari */
-::selection {
-    background: rgb(55, 59, 67, 0.99);
+.gh-notification-close:hover svg {
+    stroke: #FFF;
 }
 
-.user-image {
-    border-color: var(--dark-main-bg-color);
+/* Opacity needed to display correctly in Safari */
+::selection {
+    background: rgba(88, 101, 116, 0.99);
 }
 
 .gh-whats-new-badge-account {
@@ -1205,11 +1087,11 @@ input:focus,
 }
 
 .gh-list-scrolling thead th:first-child {
-    background: linear-gradient(90deg, rgba(16,17,20,1) 90%, rgba(16,17,20,0) 100%);
+    background: linear-gradient(90deg, rgba(21,23,26,1) 90%, rgba(21,23,26,0) 100%);
 }
 
 .gh-list-scrolling tbody .gh-list-data:first-child {
-    background: linear-gradient(90deg, rgba(16,17,20,1) 90%, rgba(16,17,20,0) 100%);
+    background: linear-gradient(90deg, rgba(21,23,26,1) 90%, rgba(21,23,26,0) 100%);
 }
 
 .gh-filter-builder .gh-filters {
@@ -1218,10 +1100,6 @@ input:focus,
 
 .kg-settings-headerstyle-btn-group .gh-btn {
     border-color: var(--midlightgrey);
-}
-
-.kg-header-card.kg-style-dark {
-    background: #08090C;
 }
 
 kbd {
@@ -1237,6 +1115,11 @@ kbd {
 
 
 /* Dashboard */
+
+.gh-dashboard-box.is-secondary, .gh-dashboard-resource-box,
+.gh-main-section-content.grey {
+    background: #1C1E22;
+}
 
 .gh-dashboard .gh-dashboard-anchor .gh-dashboard-stats {
     background: transparent;
@@ -1325,7 +1208,7 @@ kbd {
 }
 
 .gh-dashboard-tooltip {
-    background: var(--whitegrey);
+    background: var(--whitegrey-l2);
 }
 
 /* Empty states */
@@ -1388,18 +1271,6 @@ kbd {
 .gh-offer-type-container .gh-radio[disabled] .gh-radio-label, .gh-offer-type-container .gh-radio[disabled] .gh-radio-desc {
     color: #4d4f52;
 }
-
-.gh-input-group-tier-trial-disabled .gh-input-append {
-    background: #0e0f11;
-    color: #4c4f52;
-    border-color: #17191c;
-    opacity: 1;
-}
-
-.gh-input-group-tier-trial-disabled .gh-input-append:before {
-    background: #0e0f11;
-}
-
 
 /* Settings Links */
 
@@ -1468,6 +1339,20 @@ kbd {
     background: transparent;
 }
 
+.gh-post-analytics-meta .gh-post-list-cta {
+    border: none!important;
+    box-shadow: none!important;
+}
+
+.gh-post-analytics-meta .gh-post-list-cta:hover, .gh-post-analytics-meta .refresh:hover {
+    background: var(--lightgrey-d1);
+    color: var(--black);
+}
+
+.gh-post-analytics-meta .gh-btn.refresh {
+    border: none;
+}
+
 
 /* Post rows */
 
@@ -1475,6 +1360,14 @@ kbd {
 .gh-posts-list-item .gh-content-entry-status,
 .gh-posts-list-item .gh-content-email-stats {
     color: #626D79;
+}
+
+.posts-list[data-ctrl] .gh-posts-list-item-group:hover::after {
+    opacity: 0.08;
+}
+
+.gh-posts-list-item-group[data-selected]::after {
+    opacity: 0.13 !important;
 }
 
 .gh-portal-settings-stripefooter {
@@ -1540,8 +1433,147 @@ kbd {
     background: var(--main-color-content-greybg);
 }
 
-/* Staff */
-.gh-roles-container .popover {
-    background: var(--dark-main-bg-color);
-    box-shadow: 0 0 1px rgba(0,0,0,.65), 0 8px 28px rgba(0,0,0,.72);
+/* ---------------------------------
+Onboarding checklist */
+
+.gh-onboarding-wrapper {
+    background: none;
+}
+
+.gh-onboarding-items {
+    border-color: var(--lightgrey);
+}
+
+.gh-onboarding-item {
+    border-color: var(--lightgrey);
+}
+
+.gh-onboarding-item--next {
+    background: #1c1e21;
+}
+
+.gh-onboarding-help a:hover {
+    color: var(--black);
+}
+
+.gh-onboarding-skip {
+    color: var(--middarkgrey);
+    border: 1px solid var(--lightgrey);
+}
+
+.gh-onboarding-ghost-logo-overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: hsl(216deg 11% 70% / 1%);
+}
+
+/* ---------------------------------
+Onboarding checklist: Share publication modal */
+
+.gh-share-card-container {
+    border: 1px solid #394047;
+}
+
+.gh-copy-publication-link {
+    background: #394047;
+    border: none;
+}
+
+.gh-copy-publication-link:hover {
+    border: none;
+    opacity: .8;
+}
+
+.gh-share-links li a {
+    border: 1px solid #394047;
+}
+
+.gh-share-links li a:hover {
+    background: #394047;
+}
+
+.gh-sidebar-banner.gh-error-banner {
+    background: var(--lightgrey-d1);
+}
+
+
+/* ---------------------------------
+Publish flow: Share modal */
+
+.modal-post-success .modal-footer .gh-btn:is(.twitter, .threads, .facebook, .linkedin) {
+    background: var(--lightgrey-l1)!important;
+}
+
+.modal-post-success .modal-footer .gh-btn:is(.twitter, .threads, .facebook, .linkedin, .copy-link, .copy-preview-link):hover {
+    background: var(--lightgrey-l2)!important;
+}
+
+.modal-post-success .modal-footer .gh-btn:is(.twitter, .threads) svg path {
+    fill: var(--darkgrey);
+}
+
+
+/* --------------------------------- */
+.gh-contentfilter-menu-trigger.bordered {
+    border-color: var(--lightgrey);
+}
+
+/* ---------------------------------
+New form styles */
+
+
+.gh-input-x {
+    background-color: var(--grey-900);
+}
+
+.gh-input-x::placeholder {
+    color: var(--grey-700);
+}
+
+.gh-input-x:hover {
+    background-color: var(--grey-925);
+}
+
+.gh-input-x:focus,
+.gh-input-x:focus-visible {
+    background-color: var(--grey-950);
+    border: 1px solid var(--green);
+}
+
+.settings-menu-container select,
+.settings-menu-pane .gh-date-time-picker-date,
+.settings-menu-pane .gh-date-time-picker-time {
+    background-color: var(--grey-900);
+}
+
+.settings-menu-container select:hover,
+.settings-menu-pane .gh-date-time-picker-date:hover,
+.settings-menu-pane .gh-date-time-picker-time:hover {
+    background-color: var(--grey-925);
+}
+
+.settings-menu-pane .gh-date-time-picker-date:focus,
+.settings-menu-pane .gh-date-time-picker-time:focus {
+    background-color: var(--grey-950);
+    border: 1px solid var(--green);
+}
+
+.gh-tag-image-uploader .gh-image-uploader {
+    background-color: var(--grey-900);
+    border-color: transparent;
+}
+
+.gh-main-section-content.bordered {
+    border-color: var(--grey-925);
+}
+
+.gh-expandable {
+    border: 1px solid var(--grey-925);
+}
+
+.gh-expandable-block {
+    border-bottom: 1px solid var(--grey-925);
 }

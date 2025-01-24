@@ -1,8 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
-import useForm, {SaveState} from './useForm';
-import useGlobalDirtyState from './useGlobalDirtyState';
-import useSettings from './useSettings';
-import {Setting, SettingValue, SiteData} from '../types/api';
+import {ErrorMessages, OkProps, SaveHandler, SaveState, useForm, useHandleError} from '@tryghost/admin-x-framework/hooks';
+import {Setting, SettingValue, useEditSettings} from '@tryghost/admin-x-framework/api/settings';
+import {SiteData} from '@tryghost/admin-x-framework/api/site';
+import {useGlobalData} from '../components/providers/GlobalDataProvider';
+import {useGlobalDirtyState} from '@tryghost/admin-x-design-system';
 
 interface LocalSetting extends Setting {
     dirty?: boolean;
@@ -14,26 +15,34 @@ export interface SettingGroupHook {
     saveState: SaveState;
     siteData: SiteData | null;
     focusRef: React.RefObject<HTMLInputElement>;
-    handleSave: () => Promise<void>;
+    handleSave: SaveHandler;
     handleCancel: () => void;
     updateSetting: (key: string, value: SettingValue) => void;
     handleEditingChange: (newState: boolean) => void;
+    validate: () => boolean;
+    errors: ErrorMessages;
+    clearError: (key: string) => void;
+    okProps: OkProps;
 }
 
-const useSettingGroup = (): SettingGroupHook => {
+const useSettingGroup = ({savingDelay, onValidate}: {savingDelay?: number; onValidate?: () => ErrorMessages} = {}): SettingGroupHook => {
     // create a ref to focus the input field
     const focusRef = useRef<HTMLInputElement>(null);
 
-    const {siteData, settings, saveSettings} = useSettings();
+    const {siteData, settings} = useGlobalData();
+    const {mutateAsync: editSettings} = useEditSettings();
+    const handleError = useHandleError();
 
     const [isEditing, setEditing] = useState(false);
 
-    const {formState: localSettings, saveState, handleSave, updateForm, reset} = useForm<LocalSetting[]>({
+    const {formState: localSettings, saveState, handleSave, updateForm, setFormState, reset, validate, errors, clearError, okProps} = useForm<LocalSetting[]>({
         initialState: settings || [],
+        savingDelay,
         onSave: async () => {
-            await saveSettings?.(changedSettings());
-            setEditing(false);
-        }
+            await editSettings?.(changedSettings());
+        },
+        onSaveError: handleError,
+        onValidate
     });
 
     const {setGlobalDirtyState} = useGlobalDirtyState();
@@ -51,7 +60,7 @@ const useSettingGroup = (): SettingGroupHook => {
     // reset the local state when there's a new settings API response, unless currently editing
     useEffect(() => {
         if (!isEditing || saveState === 'saving') {
-            reset();
+            setFormState(() => settings);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settings]);
@@ -79,9 +88,15 @@ const useSettingGroup = (): SettingGroupHook => {
 
     // function to update the local state
     const updateSetting = (key: string, value: SettingValue) => {
-        updateForm(state => state.map(setting => (
-            setting.key === key ? {...setting, value, dirty: true} : setting
-        )));
+        updateForm((state) => {
+            if (state.some(setting => setting.key === key)) {
+                return state.map(setting => (
+                    setting.key === key ? {...setting, value, dirty: true} : setting
+                ));
+            } else {
+                return [...state, {key, value, dirty: true}];
+            }
+        });
     };
 
     return {
@@ -90,10 +105,21 @@ const useSettingGroup = (): SettingGroupHook => {
         saveState,
         focusRef,
         siteData,
-        handleSave,
+        handleSave: async () => {
+            const result = await handleSave();
+            if (result) {
+                setEditing(false);
+            } else {
+            }
+            return result;
+        },
         handleCancel,
         updateSetting,
-        handleEditingChange
+        handleEditingChange,
+        validate,
+        errors,
+        clearError,
+        okProps
     };
 };
 

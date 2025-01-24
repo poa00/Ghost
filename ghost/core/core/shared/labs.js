@@ -1,3 +1,10 @@
+// Feature flags behaviour in tests:
+// By default, all flags listed in GA_FEATURES, BETA_FEATURES, and ALPHA_FEATURES
+// are globally enabled during E2E tests. This ensures flagged code paths are tested
+// automatically.
+// For more details, see the E2E testing documentation:
+// https://www.notion.so/ghost/End-to-end-Testing-6a2ef073b1754b18aff42e24a632a007
+
 const _ = require('lodash');
 const errors = require('@tryghost/errors');
 const logging = require('@tryghost/logging');
@@ -15,34 +22,37 @@ const messages = {
 // flags in this list always return `true`, allows quick global enable prior to full flag removal
 const GA_FEATURES = [
     'audienceFeedback',
+    'i18n',
     'themeErrorsNotification',
     'outboundLinkTagging',
     'announcementBar',
-    'signupForm'
+    'customFonts'
 ];
 
 // NOTE: this allowlist is meant to be used to filter out any unexpected
 //       input for the "labs" setting value
 const BETA_FEATURES = [
-    'i18n',
-    'activitypub',
+    'additionalPaymentMethods',
+    'stripeAutomaticTax',
     'webmentions',
-    'lexicalEditor'
+    'editorExcerpt',
+    'ActivityPub',
+    'importMemberTier',
+    'staff2fa',
+    'contentVisibility'
 ];
 
 const ALPHA_FEATURES = [
+    'NestPlayground',
     'urlCache',
-    'lexicalMultiplayer',
-    'websockets',
-    'stripeAutomaticTax',
     'emailCustomization',
-    'collections',
-    'adminXSettings',
     'mailEvents',
     'collectionsCard',
-    'headerUpgrade',
-    'importMemberTier',
-    'tipsAndDonations'
+    'lexicalIndicators',
+    'adminXDemo',
+    'postsX',
+    'captcha',
+    'contentVisibilityAlpha'
 ];
 
 module.exports.GA_KEYS = [...GA_FEATURES];
@@ -61,9 +71,18 @@ module.exports.getAll = () => {
         labs[gaKey] = true;
     });
 
+    const labsConfig = config.get('labs') || {};
+    Object.keys(labsConfig).forEach((key) => {
+        labs[key] = labsConfig[key];
+    });
+
     labs.members = settingsCache.get('members_signup_access') !== 'none';
 
     return labs;
+};
+
+module.exports.getAllFlags = function () {
+    return [...GA_FEATURES, ...BETA_FEATURES, ...ALPHA_FEATURES];
 };
 
 /**
@@ -124,7 +143,7 @@ module.exports.enabledHelper = function enabledHelper(options, callback) {
     return errString;
 };
 
-module.exports.enabledMiddleware = flag => (req, res, next) => {
+module.exports.enabledMiddleware = flag => function labsEnabledMw(req, res, next) {
     if (module.exports.isSet(flag) === true) {
         return next();
     } else {

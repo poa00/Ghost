@@ -11,6 +11,7 @@ type Props = {
 const MoreButton: React.FC<Props> = ({comment, toggleEdit}) => {
     const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
     const {member, admin} = useAppContext();
+    const isAdmin = !!admin;
 
     const toggleContextMenu = () => {
         setIsContextMenuOpen(current => !current);
@@ -20,19 +21,17 @@ const MoreButton: React.FC<Props> = ({comment, toggleEdit}) => {
         setIsContextMenuOpen(false);
     };
 
-    /*
-     * Whether we have at least one action inside the context menu
-     * (to hide the 'more' icon if we don't have any actions)
-    */
-    const show = (!!member && comment.status === 'published') || !!admin;
+    const show = (!!member && comment.status === 'published') || isAdmin;
 
-    if (!member) {
+    if (!show) {
         return null;
     }
 
     return (
-        <div className="relative" data-testid="more-button">
-            {show ? <button className="outline-0" type="button" onClick={toggleContextMenu}><MoreIcon className='duration-50 gh-comments-icon gh-comments-icon-more fill-[rgba(0,0,0,0.5)] outline-0 transition ease-linear hover:fill-[rgba(0,0,0,0.75)] dark:fill-[rgba(255,255,255,0.5)] dark:hover:fill-[rgba(255,255,255,0.25)]' /></button> : null}
+        <div data-testid="more-button">
+            <button className="outline-0" type="button" onClick={toggleContextMenu}>
+                <MoreIcon className={`duration-50 gh-comments-icon gh-comments-icon-more outline-0 transition ease-linear hover:fill-black/75 dark:hover:fill-white/75 ${isContextMenuOpen ? 'fill-black/75 dark:fill-white/75' : 'fill-black/50 dark:fill-white/60'}`} />
+            </button>
             {isContextMenuOpen ? <CommentContextMenu close={closeContextMenu} comment={comment} toggleEdit={toggleEdit} /> : null}
         </div>
     );

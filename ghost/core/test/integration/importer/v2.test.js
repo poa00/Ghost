@@ -114,7 +114,7 @@ describe('Importer', function () {
                     return models.Settings.findOne(_.merge({key: 'active_theme'}, testUtils.context.internal));
                 })
                 .then(function (result) {
-                    result.attributes.value.should.eql('casper');
+                    result.attributes.value.should.eql('source');
                 });
         });
 
@@ -824,7 +824,7 @@ describe('Importer', function () {
 
             exportData.data.settings[0] = testUtils.DataGenerator.forKnex.createSetting({
                 key: 'labs',
-                value: JSON.stringify({activitypub: true})
+                value: JSON.stringify({additionalPaymentMethods: true})
             });
 
             return dataImporter.doImport(exportData, importOptions)
@@ -835,7 +835,7 @@ describe('Importer', function () {
                 .then(function (result) {
                     should.equal(result.attributes.key, 'labs');
                     should.equal(result.attributes.group, 'labs');
-                    should.equal(result.attributes.value, '{"activitypub":true}');
+                    should.equal(result.attributes.value, '{"additionalPaymentMethods":true}');
                 });
         });
 

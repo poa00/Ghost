@@ -1,4 +1,5 @@
 /* eslint-disable no-unused-vars */
+/* eslint-disable no-shadow */
 
 const logging = require('@tryghost/logging');
 const fs = require('fs').promises;
@@ -7,17 +8,25 @@ const {isUnsplashImage} = require('@tryghost/kg-default-cards/lib/utils');
 const {textColorForBackgroundColor, darkenToContrastThreshold} = require('@tryghost/color-utils');
 const {DateTime} = require('luxon');
 const htmlToPlaintext = require('@tryghost/html-to-plaintext');
-const tpl = require('@tryghost/tpl');
-const cheerio = require('cheerio');
+const {EmailAddressParser} = require('@tryghost/email-addresses');
+const {registerHelpers} = require('./helpers/register-helpers');
+const crypto = require('crypto');
+
+const DEFAULT_LOCALE = 'en-gb';
+
+// Wrapper function so that i18next-parser can find these strings
+const t = (x) => {
+    return x;
+};
 
 const messages = {
     subscriptionStatus: {
         free: '',
-        expired: 'Your subscription has expired.',
-        canceled: 'Your subscription has been canceled and will expire on {date}. You can resume your subscription via your account settings.',
-        active: 'Your subscription will renew on {date}.',
-        trial: 'Your free trial ends on {date}, at which time you will be charged the regular price. You can always cancel before then.',
-        complimentaryExpires: 'Your subscription will expire on {date}.',
+        expired: t('Your subscription has expired.'),
+        canceled: t('Your subscription has been canceled and will expire on {date}. You can resume your subscription via your account settings.'),
+        active: t('Your subscription will renew on {date}.'),
+        trial: t('Your free trial ends on {date}, at which time you will be charged the regular price. You can always cancel before then.'),
+        complimentaryExpires: t('Your subscription will expire on {date}.'),
         complimentaryInfinite: ''
     }
 };
@@ -31,8 +40,18 @@ function escapeHtml(unsafe) {
         .replace(/'/g, '&#039;');
 }
 
-function formatDateLong(date, timezone) {
-    return DateTime.fromJSDate(date).setZone(timezone).setLocale('en-gb').toLocaleString({
+function isValidLocale(locale) {
+    try {
+        // Attempt to create a DateTimeFormat with the locale
+        new Intl.DateTimeFormat(locale);
+        return true; // No error means it's a valid locale
+    } catch (e) {
+        return false; // RangeError means invalid locale
+    }
+}
+
+function formatDateLong(date, timezone, locale = DEFAULT_LOCALE) {
+    return DateTime.fromJSDate(date).setZone(timezone).setLocale(locale).toLocaleString({
         year: 'numeric',
         month: 'long',
         day: 'numeric'
@@ -41,6 +60,12 @@ function formatDateLong(date, timezone) {
 
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// This aids with lazyloading the cheerio dependency
+function cheerioLoad(html) {
+    const cheerio = require('cheerio');
+    return cheerio.load(html);
 }
 
 /**
@@ -108,13 +133,15 @@ class EmailRenderer {
     #memberAttributionService;
     #outboundLinkTagger;
     #audienceFeedbackService;
+    #emailAddressService;
     #labs;
     #models;
+    #t;
 
     /**
      * @param {object} dependencies
      * @param {object} dependencies.settingsCache
-     * @param {{getNoReplyAddress(): string, getMembersSupportAddress(): string}} dependencies.settingsHelpers
+     * @param {{getNoReplyAddress(): string, getMembersSupportAddress(): string, getMembersValidationKey(): string, createUnsubscribeUrl(uuid: string, options: object): string}} dependencies.settingsHelpers
      * @param {object} dependencies.renderers
      * @param {{render(object, options): string}} dependencies.renderers.lexical
      * @param {{render(object, options): string}} dependencies.renderers.mobiledoc
@@ -126,9 +153,11 @@ class EmailRenderer {
      * @param {object} dependencies.linkTracking
      * @param {object} dependencies.memberAttributionService
      * @param {object} dependencies.audienceFeedbackService
+     * @param {object} dependencies.emailAddressService
      * @param {object} dependencies.outboundLinkTagger
      * @param {object} dependencies.labs
      * @param {{Post: object}} dependencies.models
+     * @param {Function} dependencies.t
      */
     constructor({
         settingsCache,
@@ -142,9 +171,11 @@ class EmailRenderer {
         linkTracking,
         memberAttributionService,
         audienceFeedbackService,
+        emailAddressService,
         outboundLinkTagger,
         labs,
-        models
+        models,
+        t
     }) {
         this.#settingsCache = settingsCache;
         this.#settingsHelpers = settingsHelpers;
@@ -157,16 +188,19 @@ class EmailRenderer {
         this.#linkTracking = linkTracking;
         this.#memberAttributionService = memberAttributionService;
         this.#audienceFeedbackService = audienceFeedbackService;
+        this.#emailAddressService = emailAddressService;
         this.#outboundLinkTagger = outboundLinkTagger;
         this.#labs = labs;
         this.#models = models;
+        this.#t = t;
     }
 
-    getSubject(post) {
-        return post.related('posts_meta')?.get('email_subject') || post.get('title');
+    getSubject(post, isTestEmail = false) {
+        const subject = post.related('posts_meta')?.get('email_subject') || post.get('title');
+        return isTestEmail ? `[TEST] ${subject}` : subject;
     }
 
-    getFromAddress(_post, newsletter) {
+    #getRawFromAddress(post, newsletter) {
         let senderName = this.#settingsCache.get('title') ? this.#settingsCache.get('title').replace(/"/g, '\\"') : '';
         if (newsletter.get('sender_name')) {
             senderName = newsletter.get('sender_name');
@@ -185,8 +219,38 @@ class EmailRenderer {
                 fromAddress = localAddress;
             }
         }
+        return {
+            address: fromAddress,
+            name: senderName || undefined
+        };
+    }
 
-        return senderName ? `"${senderName}" <${fromAddress}>` : fromAddress;
+    // Locale is user-input, so we need to ensure it's valid
+    #getValidLocale() {
+        let locale = this.#settingsCache.get('locale') || DEFAULT_LOCALE;
+
+        if (!this.#labs.isSet('i18n')) {
+            locale = DEFAULT_LOCALE;
+        }
+
+        // Remove any trailing whitespace
+        locale = locale.trim();
+
+        // If the locale is just "en", or is not valid, revert to default
+        if (locale === 'en' || !isValidLocale(locale)) {
+            locale = DEFAULT_LOCALE;
+        }
+
+        return locale;
+    }
+
+    getFromAddress(post, newsletter) {
+        // Clean from address to ensure DMARC alignment
+        const addresses = this.#emailAddressService.getAddress({
+            from: this.#getRawFromAddress(post, newsletter)
+        });
+
+        return EmailAddressParser.stringify(addresses.from);
     }
 
     /**
@@ -195,10 +259,25 @@ class EmailRenderer {
      * @returns {string|null}
      */
     getReplyToAddress(post, newsletter) {
-        if (newsletter.get('sender_reply_to') === 'support') {
+        const replyToAddress = newsletter.get('sender_reply_to');
+
+        if (replyToAddress === 'support') {
             return this.#settingsHelpers.getMembersSupportAddress();
         }
-        return this.getFromAddress(post, newsletter);
+
+        if (replyToAddress === 'newsletter' && !this.#emailAddressService.managedEmailEnabled) {
+            return this.getFromAddress(post, newsletter);
+        }
+
+        const addresses = this.#emailAddressService.getAddress({
+            from: this.#getRawFromAddress(post, newsletter),
+            replyTo: replyToAddress === 'newsletter' ? undefined : {address: replyToAddress}
+        });
+
+        if (addresses.replyTo) {
+            return EmailAddressParser.stringify(addresses.replyTo);
+        }
+        return null;
     }
 
     /**
@@ -219,7 +298,7 @@ class EmailRenderer {
             return allowedSegments;
         }
 
-        const $ = cheerio.load(html);
+        const $ = cheerioLoad(html);
 
         let allSegments = $('[data-gh-segment]')
             .get()
@@ -282,7 +361,7 @@ class EmailRenderer {
             }
         }
 
-        let $ = cheerio.load(html);
+        let $ = cheerioLoad(html);
 
         // Remove parts of the HTML not applicable to the current segment - We do this
         // before rendering the template as the preheader for the email may be generated
@@ -309,9 +388,22 @@ class EmailRenderer {
         });
         html = await this.renderTemplate(templateData);
 
+        // We pass the base option to the link replacer so relative links are replaced with absolute links, relative to this base url
+        const base = templateData.post.url;
+
         // Link tracking
         if (options.clickTrackingEnabled) {
-            html = await this.#linkReplacer.replace(html, async (url) => {
+            html = await this.#linkReplacer.replace(html, async (url, originalPath) => {
+                if (originalPath.startsWith('%%{') && originalPath.endsWith('}%%')) {
+                    // Don't add the base url to replacement strings
+                    return originalPath;
+                }
+
+                // Ignore empty hashtags (used as a hack for email addresses to prevent making them clickable)
+                if (originalPath === '#') {
+                    return originalPath;
+                }
+
                 // We ignore all links that contain %%{uuid}%%
                 // because otherwise we would add tracking to links that need to be replaced first
                 if (url.toString().indexOf('%%{uuid}%%') !== -1) {
@@ -332,23 +424,72 @@ class EmailRenderer {
                     url = this.#outboundLinkTagger.addToUrl(url);
                 }
 
+                // Don't add tracking to the Powered by Ghost badge
+                if (url.hostname === 'ghost.org' && url.pathname === '/' && url.searchParams.get('via') === 'pbg-newsletter') {
+                    return url.toString();
+                }
+
                 // Add link click tracking
                 url = await this.#linkTracking.service.addTrackingToUrl(url, post, '--uuid--');
 
                 // We need to convert to a string at this point, because we need invalid string characters in the URL
                 const str = url.toString().replace(/--uuid--/g, '%%{uuid}%%');
                 return str;
-            });
+            }, {base});
+        } else {
+            // Replace all relative links to absolute ones
+            html = await this.#linkReplacer.replace(html, (url, originalPath) => {
+                if (originalPath.startsWith('%%{') && originalPath.endsWith('}%%')) {
+                    // Don't add the base url to replacement strings
+                    return originalPath;
+                }
+
+                // Ignore empty hashtags (used as a hack for email addresses to prevent making them clickable)
+                if (originalPath === '#') {
+                    return originalPath;
+                }
+                return url;
+            }, {base});
         }
+
+        // Record the original image width and height attributes before inlining the styles with juice
+        // If any images have `width: auto` or `height: auto` set via CSS,
+        // juice will explicitly set the width/height attributes to `auto` on the <img /> tag
+        // This is not supported by Outlook, so we need to reset the width/height attributes to the original values
+        // Other clients will ignore the width/height attributes and use the inlined CSS instead
+        $ = cheerioLoad(html);
+        const originalImageSizes = $('img').get().map((image) => {
+            const src = image.attribs.src;
+            const width = image.attribs.width;
+            const height = image.attribs.height;
+            return {src, width, height};
+        });
+
+        // Add a class to each figcaption so we can style them in the email
+        $('figcaption').each((i, elem) => !!($(elem).addClass('kg-card-figcaption')));
+        html = $.html();
 
         // Juice HTML (inline CSS)
         const juice = require('juice');
-        juice.heightElements = ['TABLE', 'TD', 'TH'];
-        juice.widthElements = ['TABLE', 'TD', 'TH'];
         html = juice(html, {inlinePseudoElements: true, removeStyleTags: true});
 
         // happens after inlining of CSS so we can change element types without worrying about styling
-        $ = cheerio.load(html);
+        $ = cheerioLoad(html);
+
+        // Reset any `height="auto"` or `width="auto"` attributes to their original values before inlining CSS
+        const imageTags = $('img').get();
+        for (let i = 0; i < imageTags.length; i += 1) {
+            // There shouldn't be any issues with consistency between these two lists, but just in case...
+            if (imageTags[i].attribs.src === originalImageSizes[i].src) {
+                // if the image width or height is set to 'auto', reset to its original value
+                if (imageTags[i].attribs.width === 'auto' && originalImageSizes[i].width) {
+                    imageTags[i].attribs.width = originalImageSizes[i].width;
+                }
+                if (imageTags[i].attribs.height === 'auto' && originalImageSizes[i].height) {
+                    imageTags[i].attribs.height = originalImageSizes[i].height;
+                }
+            }
+        }
 
         // force all links to open in new tab
         $('a').attr('target', '_blank');
@@ -404,22 +545,7 @@ class EmailRenderer {
      * @param {boolean} [options.comments] Unsubscribe from comment emails
      */
     createUnsubscribeUrl(uuid, options = {}) {
-        const siteUrl = this.#urlUtils.urlFor('home', true);
-        const unsubscribeUrl = new URL(siteUrl);
-        unsubscribeUrl.pathname = `${unsubscribeUrl.pathname}/unsubscribe/`.replace('//', '/');
-        if (uuid) {
-            unsubscribeUrl.searchParams.set('uuid', uuid);
-        } else {
-            unsubscribeUrl.searchParams.set('preview', '1');
-        }
-        if (options.newsletterUuid) {
-            unsubscribeUrl.searchParams.set('newsletter', options.newsletterUuid);
-        }
-        if (options.comments) {
-            unsubscribeUrl.searchParams.set('comments', '1');
-        }
-
-        return unsubscribeUrl.href;
+        return this.#settingsHelpers.createUnsubscribeUrl(uuid, options);
     }
 
     /**
@@ -463,9 +589,12 @@ class EmailRenderer {
      * @returns {string}
      */
     getMemberStatusText(member) {
+        const t = this.#t;
+        const locale = this.#getValidLocale();
+
         if (member.status === 'free') {
             // Not really used, but as a backup
-            return tpl(messages.subscriptionStatus.free);
+            return t(messages.subscriptionStatus.free);
         }
 
         // Do we have an active subscription?
@@ -478,12 +607,12 @@ class EmailRenderer {
 
             if (!activeSubscription && !member.tiers.length) {
                 // No subscription?
-                return tpl(messages.subscriptionStatus.expired);
+                return t(messages.subscriptionStatus.expired);
             }
 
             if (!activeSubscription) {
                 if (!member.tiers[0]?.expiry_at) {
-                    return tpl(messages.subscriptionStatus.complimentaryInfinite);
+                    return t(messages.subscriptionStatus.complimentaryInfinite);
                 }
                 // Create one manually that is expiring
                 activeSubscription = {
@@ -494,30 +623,28 @@ class EmailRenderer {
                 };
             }
             const timezone = this.#settingsCache.get('timezone');
-
             // Translate to a human readable string
             if (activeSubscription.trial_end_at && activeSubscription.trial_end_at > new Date() && activeSubscription.status === 'trialing') {
-                const date = formatDateLong(activeSubscription.trial_end_at, timezone);
-                return tpl(messages.subscriptionStatus.trial, {date});
+                const date = formatDateLong(activeSubscription.trial_end_at, timezone, locale);
+                return t(messages.subscriptionStatus.trial, {date});
             }
 
-            const date = formatDateLong(activeSubscription.current_period_end, timezone);
+            const date = formatDateLong(activeSubscription.current_period_end, timezone, locale);
             if (activeSubscription.cancel_at_period_end) {
-                return tpl(messages.subscriptionStatus.canceled, {date});
+                return t(messages.subscriptionStatus.canceled, {date});
             }
-
-            return tpl(messages.subscriptionStatus.active, {date});
+            return t(messages.subscriptionStatus.active, {date});
         }
 
         const expires = member.tiers[0]?.expiry_at ?? null;
 
         if (expires) {
             const timezone = this.#settingsCache.get('timezone');
-            const date = formatDateLong(expires, timezone);
-            return tpl(messages.subscriptionStatus.complimentaryExpires, {date});
+            const date = formatDateLong(expires, timezone, locale);
+            return t(messages.subscriptionStatus.complimentaryExpires, {date});
         }
 
-        return tpl(messages.subscriptionStatus.complimentaryInfinite);
+        return t(messages.subscriptionStatus.complimentaryInfinite);
     }
 
     /**
@@ -525,6 +652,9 @@ class EmailRenderer {
      * @returns {ReplacementDefinition[]}
      */
     buildReplacementDefinitions({html, newsletterUuid}) {
+        const t = this.#t; // es-lint-disable-line no-shadow
+        const locale = this.#getValidLocale();
+
         const baseDefinitions = [
             {
                 id: 'unsubscribe_url',
@@ -542,6 +672,12 @@ class EmailRenderer {
                 id: 'uuid',
                 getValue: (member) => {
                     return member.uuid;
+                }
+            },
+            {
+                id: 'key',
+                getValue: (member) => {
+                    return crypto.createHmac('sha256', this.#settingsHelpers.getMembersValidationKey()).update(member.uuid).digest('hex');
                 }
             },
             {
@@ -572,26 +708,36 @@ class EmailRenderer {
                 id: 'created_at',
                 getValue: (member) => {
                     const timezone = this.#settingsCache.get('timezone');
-                    return member.createdAt ? formatDateLong(member.createdAt, timezone) : '';
+                    return member.createdAt ? formatDateLong(member.createdAt, timezone, locale) : '';
                 }
             },
             {
                 id: 'status',
                 getValue: (member) => {
                     if (member.status === 'comped') {
-                        return 'complimentary';
+                        return t('complimentary');
                     }
                     if (this.isMemberTrialing(member)) {
-                        return 'trialing';
+                        return t('trialing');
                     }
-                    return member.status;
+                    // other possible statuses: t('free'), t('paid') //
+                    return t(member.status);
                 }
             },
             {
+                //TODO i18n
                 id: 'status_text',
                 getValue: (member) => {
                     return this.getMemberStatusText(member);
                 }
+            },
+            // List unsubscribe header to unsubcribe in one-click
+            {
+                id: 'list_unsubscribe',
+                getValue: (member) => {
+                    return this.createUnsubscribeUrl(member.uuid, {newsletterUuid});
+                },
+                required: true // Used in email headers
             }
         ];
 
@@ -627,6 +773,18 @@ class EmailRenderer {
             }
         }
 
+        // Add all required replacements
+        for (const definition of baseDefinitions) {
+            if (definition.required && !replacements.find(r => r.id === definition.id)) {
+                replacements.push({
+                    id: definition.id,
+                    originalId: definition.id,
+                    token: new RegExp(`%%\\{${definition.id}\\}%%`, 'g'),
+                    getValue: definition.getValue
+                });
+            }
+        }
+
         // Now loop any replacements with possible invalid characters and replace them with a clean id
         let counter = 1;
         for (const replacement of replacements) {
@@ -636,66 +794,23 @@ class EmailRenderer {
             }
             delete replacement.originalId;
         }
-
         return replacements;
     }
 
+    getLabs() {
+        return this.#labs;
+    }
+
     async renderTemplate(data) {
-        this.#handlebars = require('handlebars');
+        const labs = this.getLabs();
+        this.#handlebars = require('handlebars').create();
 
-        // Helpers
-        this.#handlebars.registerHelper('if', function (conditional, options) {
-            if (conditional) {
-                return options.fn(this);
-            } else {
-                return options.inverse(this);
-            }
-        });
-
-        this.#handlebars.registerHelper('and', function () {
-            const len = arguments.length - 1;
-
-            for (let i = 0; i < len; i++) {
-                if (!arguments[i]) {
-                    return false;
-                }
-            }
-
-            return true;
-        });
-
-        this.#handlebars.registerHelper('not', function () {
-            const len = arguments.length - 1;
-
-            for (let i = 0; i < len; i++) {
-                if (!arguments[i]) {
-                    return true;
-                }
-            }
-
-            return false;
-        });
-
-        this.#handlebars.registerHelper('or', function () {
-            const len = arguments.length - 1;
-
-            for (let i = 0; i < len; i++) {
-                if (arguments[i]) {
-                    return true;
-                }
-            }
-
-            return false;
-        });
+        // Register helpers
+        registerHelpers(this.#handlebars, labs, this.#t);
 
         // Partials
-        if (this.#labs.isSet('emailCustomization')) {
-            const cssPartialSource = await fs.readFile(path.join(__dirname, './email-templates/partials/', `styles.hbs`), 'utf8');
-            this.#handlebars.registerPartial('styles', cssPartialSource);
-        } else {
-            const cssPartialSource = await fs.readFile(path.join(__dirname, './email-templates/partials/', `styles-old.hbs`), 'utf8');
-            this.#handlebars.registerPartial('styles', cssPartialSource);
-        }
+        const cssPartialSource = await fs.readFile(path.join(__dirname, './email-templates/partials/', `styles.hbs`), 'utf8');
+        this.#handlebars.registerPartial('styles', cssPartialSource);
 
         const paywallPartial = await fs.readFile(path.join(__dirname, './email-templates/partials/', `paywall.hbs`), 'utf8');
         this.#handlebars.registerPartial('paywall', paywallPartial);
@@ -703,20 +818,13 @@ class EmailRenderer {
         const feedbackButtonPartial = await fs.readFile(path.join(__dirname, './email-templates/partials/', `feedback-button.hbs`), 'utf8');
         this.#handlebars.registerPartial('feedbackButton', feedbackButtonPartial);
 
-        const feedbackButtonMobilePartial = await fs.readFile(path.join(__dirname, './email-templates/partials/', `feedback-button-mobile.hbs`), 'utf8');
-        this.#handlebars.registerPartial('feedbackButtonMobile', feedbackButtonMobilePartial);
-
         const latestPostsPartial = await fs.readFile(path.join(__dirname, './email-templates/partials/', `latest-posts.hbs`), 'utf8');
         this.#handlebars.registerPartial('latestPosts', latestPostsPartial);
 
         // Actual template
-        if (this.#labs.isSet('emailCustomization')) {
-            const htmlTemplateSource = await fs.readFile(path.join(__dirname, './email-templates/', `template.hbs`), 'utf8');
-            this.#renderTemplate = this.#handlebars.compile(Buffer.from(htmlTemplateSource).toString());
-        } else {
-            const htmlTemplateSource = await fs.readFile(path.join(__dirname, './email-templates/', `template-old.hbs`), 'utf8');
-            this.#renderTemplate = this.#handlebars.compile(Buffer.from(htmlTemplateSource).toString());
-        }
+        const htmlTemplateSource = await fs.readFile(path.join(__dirname, './email-templates/', `template.hbs`), 'utf8');
+        this.#renderTemplate = this.#handlebars.compile(Buffer.from(htmlTemplateSource).toString());
+
         return this.#renderTemplate(data);
     }
 
@@ -757,18 +865,23 @@ class EmailRenderer {
      *
      * @param {*} text
      * @param {number} maxLength
-     * @param {number} maxLengthMobile should be larger than maxLength
+     * @param {number} maxLengthMobile should be smaller than maxLength
      * @returns
      */
     truncateHtml(text, maxLength, maxLengthMobile) {
-        if (!maxLengthMobile || maxLength >= maxLengthMobile) {
+        if (!maxLengthMobile || maxLength <= maxLengthMobile) {
             return escapeHtml(this.truncateText(text, maxLength));
         }
-        if (text && text.length > maxLength) {
-            if (text.length <= maxLengthMobile) {
-                return escapeHtml(text.substring(0, maxLength - 1)) + '<span class="mobile-only">' + escapeHtml(text.substring(maxLength - 1, maxLengthMobile - 1)) + '</span>' + '<span class="hide-mobile">…</span>';
+        if (text && text.length > maxLengthMobile) {
+            let ellipsis = '';
+
+            if (text.length > maxLengthMobile && text.length <= maxLength) {
+                ellipsis = '<span class="hide-desktop">…</span>';
+            } else if (text.length > maxLength) {
+                ellipsis = '…';
             }
-            return escapeHtml(text.substring(0, maxLength - 1)) + '<span class="mobile-only">' + escapeHtml(text.substring(maxLength - 1, maxLengthMobile - 1)) + '</span>' + '…';
+
+            return escapeHtml(text.substring(0, maxLengthMobile - 1)) + '<span class="desktop-only">' + escapeHtml(text.substring(maxLengthMobile - 1, maxLength - 1)) + '</span>' + ellipsis;
         } else {
             return escapeHtml(text ?? '');
         }
@@ -888,13 +1001,15 @@ class EmailRenderer {
         const positiveLink = this.#audienceFeedbackService.buildLink(
             '--uuid--',
             post.id,
-            1
-        ).href.replace('--uuid--', '%%{uuid}%%');
+            1,
+            '--key--'
+        ).href.replace('--uuid--', '%%{uuid}%%').replace('--key--', '%%{key}%%');
         const negativeLink = this.#audienceFeedbackService.buildLink(
             '--uuid--',
             post.id,
-            0
-        ).href.replace('--uuid--', '%%{uuid}%%');
+            0,
+            '--key--'
+        ).href.replace('--uuid--', '%%{uuid}%%').replace('--key--', '%%{key}%%');
 
         const commentUrl = new URL(postUrl);
         commentUrl.hash = '#ghost-comments';
@@ -906,7 +1021,7 @@ class EmailRenderer {
         if (newsletter.get('show_latest_posts')) {
             // Fetch last 3 published posts
             const {data} = await this.#models.Post.findPage({
-                filter: 'status:published+id:-' + post.id,
+                filter: `status:published+id:-'${post.id}'`,
                 order: 'published_at DESC',
                 limit: 3
             });
@@ -917,7 +1032,7 @@ class EmailRenderer {
                 const {href: featureImageMobile, width: featureImageMobileWidth, height: featureImageMobileHeight} = await this.limitImageWidth(latestPost.get('feature_image'), 600, 480);
 
                 latestPosts.push({
-                    title: this.truncateHtml(latestPost.get('title'), featureImage ? 85 : 105, 105),
+                    title: this.truncateHtml(latestPost.get('title'), featureImage ? 85 : 95, featureImageMobile ? 55 : 75),
                     url: this.#getPostUrl(latestPost),
                     featureImage: featureImage ? {
                         src: featureImage,
@@ -929,13 +1044,23 @@ class EmailRenderer {
                         width: featureImageMobileWidth,
                         height: featureImageMobileHeight
                     } : null,
-                    excerpt: this.truncateHtml(latestPost.get('custom_excerpt') || latestPost.get('plaintext'), featureImage ? 60 : 70, 105)
+                    excerpt: this.truncateHtml(latestPost.get('custom_excerpt') || latestPost.get('plaintext'), featureImage ? 120 : 130, featureImageMobile ? 90 : 100)
                 });
 
                 if (featureImage) {
                     latestPostsHasImages = true;
                 }
             }
+        }
+
+        let excerptFontClass = '';
+        const bodyFont = newsletter.get('body_font_category');
+        const titleFont = newsletter.get('title_font_category');
+
+        if (titleFont === 'serif' && bodyFont === 'serif') {
+            excerptFontClass = 'post-excerpt-serif-serif';
+        } else if (titleFont === 'serif' && bodyFont !== 'serif') {
+            excerptFontClass = 'post-excerpt-serif-sans';
         }
 
         const data = {
@@ -956,6 +1081,7 @@ class EmailRenderer {
                 commentUrl: commentUrl.href,
                 authors,
                 publishedAt,
+                customExcerpt: post.get('custom_excerpt'),
                 feature_image: postFeatureImage,
                 feature_image_width: postFeatureImageWidth,
                 feature_image_height: postFeatureImageHeight,
@@ -966,6 +1092,7 @@ class EmailRenderer {
             newsletter: {
                 name: newsletter.get('name'),
                 showPostTitleSection: newsletter.get('show_post_title_section'),
+                showExcerpt: newsletter.get('show_excerpt'),
                 showCommentCta: newsletter.get('show_comment_cta') && this.#settingsCache.get('comments_enabled') !== 'off' && !hasEmailOnlyFlag,
                 showSubscriptionDetails: newsletter.get('show_subscription_details')
             },
@@ -997,8 +1124,9 @@ class EmailRenderer {
             footerContent: newsletter.get('footer_content'),
 
             classes: {
-                title: 'post-title' + (newsletter.get('title_font_category') === 'serif' ? ` post-title-serif` : ``) + (newsletter.get('title_alignment') === 'left' ? ` post-title-left` : ``),
+                title: 'post-title' + ` ` + (post.get('custom_excerpt') ? 'post-title-with-excerpt' : 'post-title-no-excerpt') + (newsletter.get('title_font_category') === 'serif' ? ` post-title-serif` : ``) + (newsletter.get('title_alignment') === 'left' ? ` post-title-left` : ``),
                 titleLink: 'post-title-link' + (newsletter.get('title_alignment') === 'left' ? ` post-title-link-left` : ``),
+                excerpt: 'post-excerpt' + ` ` + (newsletter.get('show_feature_image') && !!postFeatureImage ? 'post-excerpt-with-feature-image' : 'post-excerpt-no-feature-image') + ` ` + excerptFontClass + (newsletter.get('title_alignment') === 'left' ? ` post-excerpt-left` : ``),
                 meta: 'post-meta' + (newsletter.get('title_alignment') === 'left' ? ` post-meta-left` : ` post-meta-center`),
                 body: newsletter.get('body_font_category') === 'sans_serif' ? `post-content-sans-serif` : `post-content`
             },

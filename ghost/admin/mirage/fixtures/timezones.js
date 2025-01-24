@@ -120,8 +120,8 @@ export default [
         label: '(GMT +1:00) West Central Africa'
     },
     {
-        name: 'Europe/Istanbul',
-        label: '(GMT +2:00) Athens, Beirut, Bucharest, Istanbul'
+        name: 'Europe/Athens',
+        label: '(GMT +2:00) Athens, Beirut, Bucharest'
     },
     {
         name: 'Africa/Cairo',
@@ -132,7 +132,7 @@ export default [
         label: '(GMT +2:00) Harare'
     },
     {
-        name: 'Europe/Kyiv',
+        name: 'Europe/Kiev',
         label: '(GMT +2:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius'
     },
     {
@@ -150,6 +150,10 @@ export default [
     {
         name: 'Asia/Riyadh',
         label: '(GMT +3:00) Kuwait, Nairobi, Riyadh'
+    },
+    {
+        name: 'Europe/Istanbul',
+        label: '(GMT +3:00) Istanbul, Ankara'
     },
     {
         name: 'Europe/Moscow',

@@ -1,6 +1,6 @@
 const assert = require('assert/strict');
 const linkReplacer = require('../lib/link-replacer');
-const cheerio = require('cheerio');
+const html5parser = require('html5parser');
 const sinon = require('sinon');
 
 describe('LinkReplacementService', function () {
@@ -18,6 +18,30 @@ describe('LinkReplacementService', function () {
             const expected = '<a href="https://google.com/test-dir?test-query">link</a>';
 
             const replaced = await linkReplacer.replace(html, () => new URL('https://google.com/test-dir?test-query'));
+            assert.equal(replaced, expected);
+        });
+
+        it('Can replace relative URLs', async function () {
+            const html = '<a href="dir/path">link</a>';
+            const expected = '<a href="https://google.com/test-dir/dir/path">link</a>';
+
+            const replaced = await linkReplacer.replace(html, u => u, {base: 'https://google.com/test-dir/'});
+            assert.equal(replaced, expected);
+        });
+
+        it('Can replace relative URLs relative to root domain', async function () {
+            const html = '<a href="/dir/path">link</a>';
+            const expected = '<a href="https://google.com/dir/path">link</a>';
+
+            const replaced = await linkReplacer.replace(html, u => u, {base: 'https://google.com/test-dir/'});
+            assert.equal(replaced, expected);
+        });
+
+        it('Can replace fragments relative to base', async function () {
+            const html = '<a href="#support">link</a>';
+            const expected = '<a href="https://google.com/test-dir/#support">link</a>';
+
+            const replaced = await linkReplacer.replace(html, u => u, {base: 'https://google.com/test-dir/'});
             assert.equal(replaced, expected);
         });
 
@@ -59,12 +83,20 @@ describe('LinkReplacementService', function () {
             assert.equal(replaced, expected);
         });
 
-        it('Ignores cheerio errors', async function () {
-            sinon.stub(cheerio, 'load').throws(new Error('test'));
+        it('Ignores parse errors', async function () {
+            sinon.stub(html5parser, 'tokenize').throws(new Error('test'));
             const html = '<a href="http://localhost:2368/dir/path">link</a>';
 
             const replaced = await linkReplacer.replace(html, () => 'valid');
             assert.equal(replaced, html);
+        });
+
+        it('Doesn\'t replace single-quote attributes with double-quote', async function () {
+            const html = '<div data-graph-name=\'The "all-in" cost of a grant\'>Test</div>';
+            const expected = '<div data-graph-name=\'The "all-in" cost of a grant\'>Test</div>';
+
+            const replaced = await linkReplacer.replace(html, () => new URL('https://google.com/test-dir?test-query'));
+            assert.equal(replaced, expected);
         });
     });
 });

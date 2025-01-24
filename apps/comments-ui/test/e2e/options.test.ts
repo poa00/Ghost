@@ -1,4 +1,4 @@
-import {MockedApi, initialize} from '../utils/e2e';
+import {MockedApi, initialize, waitForFrameOpacity} from '../utils/e2e';
 import {expect, test} from '@playwright/test';
 
 function rgbToHsl(r: number, g: number, b: number) {
@@ -6,13 +6,13 @@ function rgbToHsl(r: number, g: number, b: number) {
     g /= 255;
     b /= 255;
 
-    var max = Math.max(r, g, b), min = Math.min(r, g, b);
-    var h, s, l = (max + min) / 2;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
 
     if (max === min) {
         h = s = 0; // achromatic
     } else {
-        var d = max - min;
+        const d = max - min;
         s = Math.round(l > 0.5 ? d / (2 - max - min) : d / (max + min) * 10) / 10;
 
         switch (max) {
@@ -193,7 +193,15 @@ test.describe('Options', async () => {
 
         test('Uses 100 avatarSaturation', async ({page}) => {
             const mockedApi = new MockedApi({});
-            mockedApi.addComment();
+            mockedApi.addComment({
+                member: {
+                    id: 'test-id',
+                    uuid: 'test-uuid',
+                    name: 'Test User',
+                    avatar: '',
+                    expertise: ''
+                }
+            });
 
             const {frame} = await initialize({
                 mockedApi,
@@ -203,6 +211,10 @@ test.describe('Options', async () => {
             });
 
             const avatars = await frame.getByTestId('avatar-background').first();
+
+            // Comments animate in which can mess with the color saturation check,
+            // wait for full visibility before checking the color
+            await waitForFrameOpacity(frame, '[data-testid="animated-comment"]');
 
             // Get computed background color
             const color = await avatars.evaluate((node) => {
@@ -297,25 +309,6 @@ test.describe('Options', async () => {
             expect(titleColor).toBe('rgba(255, 255, 255, 0.85)');
         });
 
-        test('Uses dark text in light mode', async ({page}) => {
-            const mockedApi = new MockedApi({});
-            mockedApi.addComment();
-
-            const {frame} = await initialize({
-                mockedApi,
-                page,
-                publication: 'Publisher Weekly',
-                colorScheme: 'light'
-            });
-
-            const title = await frame.locator('[data-testid="cta-box"] h1');
-            const titleColor = await title.evaluate((node) => {
-                const style = window.getComputedStyle(node);
-                return style.getPropertyValue('color');
-            });
-            expect(titleColor).toBe('rgb(0, 0, 0)');
-        });
-
         test('Uses light mode by default', async ({page}) => {
             const mockedApi = new MockedApi({});
             mockedApi.addComment();
@@ -353,6 +346,26 @@ test.describe('Options', async () => {
                 return style.getPropertyValue('color');
             });
             expect(titleColor).toBe('rgba(255, 255, 255, 0.85)');
+        });
+
+        test('Uses dark text in light mode', async ({page}) => {
+            const mockedApi = new MockedApi({});
+            mockedApi.addComment();
+
+            const {frame} = await initialize({
+                mockedApi,
+                page,
+                publication: 'Publisher Weekly',
+                colorScheme: 'light',
+                bodyStyle: 'color: #fff;'
+            });
+
+            const title = await frame.locator('[data-testid="cta-box"] h1');
+            const titleColor = await title.evaluate((node) => {
+                const style = window.getComputedStyle(node);
+                return style.getPropertyValue('color');
+            });
+            expect(titleColor).toBe('rgb(0, 0, 0)');
         });
     });
 });

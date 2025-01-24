@@ -622,6 +622,14 @@ export default class GhPostSettingsMenu extends Component {
     }
 
     @action
+    savePost() {
+        this.savePostTask.perform().catch((error) => {
+            this.showError(error);
+            this.post.rollbackAttributes();
+        });
+    }
+
+    @action
     deletePostInternal() {
         if (this.deletePost) {
             this.deletePost();
@@ -643,5 +651,6 @@ export default class GhPostSettingsMenu extends Component {
 
     setSidebarWidthVariable(width) {
         document.documentElement.style.setProperty('--editor-sidebar-width', `${width}px`);
+        document.documentElement.style.setProperty('--kg-breakout-adjustment', `${width}px`);
     }
 }

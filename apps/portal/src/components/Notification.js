@@ -15,9 +15,9 @@ const Styles = () => {
             position: 'fixed',
             top: '0',
             right: '0',
-            maxWidth: '415px',
+            maxWidth: '481px',
             width: '100%',
-            height: '120px',
+            height: '220px',
             animation: '250ms ease 0s 1 normal none running animation-bhegco',
             transition: 'opacity 0.3s ease 0s',
             overflow: 'hidden'
@@ -34,30 +34,27 @@ const NotificationText = ({type, status, context}) => {
         const firstname = context.member.firstname || '';
         return (
             <p>
-                {firstname ? t('Welcome back, {{name}}!', {name: firstname}) : t('Welcome back!')}<br />{t('You\'ve successfully signed in.')}
+                <strong>{firstname ? t('Welcome back, {{name}}!', {name: firstname}) : t('Welcome back!')}</strong><br />{t('You\'ve successfully signed in.')}
             </p>
         );
     } else if (type === 'signin' && status === 'error') {
         return (
             <p>
-                {t('Could not sign in. Login link expired.')} <a href={signinPortalLink} target="_parent">{t('Click here to retry')}</a>
+                {t('Could not sign in. Login link expired.')} <br /><a href={signinPortalLink} target="_parent">{t('Click here to retry')}</a>
             </p>
         );
     } else if (type === 'signup' && status === 'success') {
-        // TODO: Wrap these strings with translation function
-        /* eslint-disable i18next/no-literal-string */
         return (
             <p>
-                You&apos;ve successfully subscribed to <br /><strong>{context.site.title}</strong>
+                {t('You\'ve successfully subscribed to')} <br /><strong>{context.site.title}</strong>
             </p>
         );
     } else if (type === 'signup-paid' && status === 'success') {
         return (
             <p>
-                You&apos;ve successfully subscribed to <br /><strong>{context.site.title}</strong>
+                {t('You\'ve successfully subscribed to')} <br /><strong>{context.site.title}</strong>
             </p>
         );
-        /* eslint-enable i18next/no-literal-string */
     } else if (type === 'updateEmail' && status === 'success') {
         return (
             <p>
@@ -107,6 +104,12 @@ const NotificationText = ({type, status, context}) => {
         return (
             <p>
                 {t('Plan checkout was cancelled.')}
+            </p>
+        );
+    } else if (type === 'support' && status === 'success') {
+        return (
+            <p>
+                {t('Thank you for your support!')}
             </p>
         );
     }
@@ -199,6 +202,16 @@ export default class Notification extends React.Component {
         };
     }
 
+    componentDidMount() {
+        const {showPopup} = this.context;
+        if (showPopup) {
+            // Don't show a notification if there is a popup visible on page load
+            this.setState({
+                active: false
+            });
+        }
+    }
+
     onHideNotification() {
         const type = this.state.type;
         const deleteParams = [];
@@ -236,7 +249,7 @@ export default class Notification extends React.Component {
         const {type, status, autoHide, duration} = this.state;
         if (type && status) {
             return (
-                <Frame style={frameStyle} title="portal-notification" head={this.renderFrameStyles()} className='gh-portal-notification-iframe' >
+                <Frame style={frameStyle} title="portal-notification" head={this.renderFrameStyles()} className='gh-portal-notification-iframe' data-testid="portal-notification-frame" >
                     <NotificationContent {...{type, status, autoHide, duration}} onHideNotification={e => this.onHideNotification(e)} />
                 </Frame>
             );

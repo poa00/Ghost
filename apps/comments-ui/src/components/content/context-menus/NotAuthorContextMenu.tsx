@@ -1,12 +1,12 @@
 import React from 'react';
-import {useAppContext} from '../../../AppContext';
+import {Comment, useAppContext} from '../../../AppContext';
 
 type Props = {
     comment: Comment;
     close: () => void;
 };
 const NotAuthorContextMenu: React.FC<Props> = ({comment, close}) => {
-    const {dispatchAction} = useAppContext();
+    const {dispatchAction, t} = useAppContext();
 
     const openModal = () => {
         dispatchAction('openPopup', {
@@ -17,9 +17,9 @@ const NotAuthorContextMenu: React.FC<Props> = ({comment, close}) => {
     };
 
     return (
-        <div className="flex flex-col">
-            <button className="w-full text-left text-[14px]" type="button" onClick={openModal}>
-                <span>Report </span><span className="hidden sm:inline">comment</span>
+        <div className="flex w-full flex-col gap-0.5">
+            <button className="w-full rounded px-2.5 py-1.5 text-left text-[14px] transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700" type="button" onClick={openModal}>
+                <span className="hidden sm:inline">{t('Report comment')}</span><span className="sm:hidden">{t('Report')}</span>
             </button>
         </div>
     );

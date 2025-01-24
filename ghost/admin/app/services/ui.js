@@ -6,7 +6,6 @@ import {
 } from '@tryghost/color-utils';
 import {action, get} from '@ember/object';
 import {inject} from 'ghost-admin/decorators/inject';
-import {isEmpty} from '@ember/utils';
 import {tracked} from '@glimmer/tracking';
 
 function collectMetadataClasses(transition, prop) {
@@ -48,7 +47,6 @@ export default class UiService extends Service {
 
     @inject config;
 
-    @tracked contextualNavMenu = null;
     @tracked isFullScreen = false;
     @tracked mainClass = '';
     @tracked showMobileMenu = false;
@@ -148,11 +146,7 @@ export default class UiService extends Service {
 
         let blogTitle = this.config.blogTitle;
 
-        if (!isEmpty(tokens)) {
-            window.document.title = `${tokens.join(' - ')} - ${blogTitle}`;
-        } else {
-            window.document.title = blogTitle;
-        }
+        window.document.title = `Ghost Admin - ${blogTitle}`;
     }
 
     @action
@@ -197,5 +191,10 @@ export default class UiService extends Service {
         document.body.removeEventListener('dragleave', this.bodyDragLeaveHandler, {capture: true});
         document.body.removeEventListener('dragend', this.cancelDrag, {capture: true});
         document.body.removeEventListener('drop', this.cancelDrag, {capture: true});
+    }
+
+    @action
+    toggleMobileMenu() {
+        this.showMobileMenu = !this.showMobileMenu;
     }
 }

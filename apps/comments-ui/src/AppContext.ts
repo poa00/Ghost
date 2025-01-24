@@ -1,18 +1,8 @@
 // Ref: https://reactjs.org/docs/context.html
 import React, {useContext} from 'react';
 import {ActionType, Actions, SyncActionType, SyncActions} from './actions';
+import {AdminApi} from './utils/adminApi';
 import {Page} from './pages';
-
-export type PopupNotification = {
-    type: string,
-    status: string,
-    autoHide: boolean,
-    closeable: boolean,
-    duration: number,
-    meta: any,
-    message: string,
-    count: number
-}
 
 export type Member = {
     id: string,
@@ -25,6 +15,8 @@ export type Member = {
 export type Comment = {
     id: string,
     post_id: string,
+    in_reply_to_id: string,
+    in_reply_to_snippet: string,
     replies: Comment[],
     status: string,
     liked: boolean,
@@ -32,10 +24,19 @@ export type Comment = {
         replies: number,
         likes: number,
     },
-    member: Member,
+    member: Member | null,
     edited_at: string,
     created_at: string,
     html: string
+}
+
+export type OpenCommentForm = {
+    id: string,
+    parent_id?: string,
+    in_reply_to_id?: string,
+    in_reply_to_snippet?: string,
+    type: 'reply' | 'edit',
+    hasUnsavedChanges: boolean
 }
 
 export type AddComment = {
@@ -44,10 +45,28 @@ export type AddComment = {
     html: string
 }
 
-export type AppContextType = {
-    action: string,
-    popupNotification: PopupNotification | null,
-    customSiteUrl: string | undefined,
+export type LabsContextType = {
+    [key: string]: boolean | undefined
+}
+
+export type CommentsOptions = {
+    locale: string,
+    siteUrl: string,
+    apiKey: string | undefined,
+    apiUrl: string | undefined,
+    postId: string,
+    adminUrl: string | undefined,
+    colorScheme: string | undefined,
+    avatarSaturation: number | undefined,
+    accentColor: string,
+    commentsEnabled: string | undefined,
+    title: string | null,
+    showCount: boolean,
+    publication: string
+};
+
+export type EditableAppContext = {
+    initStatus: string,
     member: null | any,
     admin: null | any,
     comments: Comment[],
@@ -58,24 +77,47 @@ export type AppContextType = {
         total: number
     } | null,
     commentCount: number,
-    postId: string,
-    title: string,
-    showCount: boolean,
-    colorScheme: string | undefined,
-    avatarSaturation: number | undefined,
-    accentColor: string | undefined,
-    commentsEnabled: string | undefined,
-    publication: string,
-    secundaryFormCount: number,
+    openCommentForms: OpenCommentForm[],
     popup: Page | null,
-
-    // This part makes sure we can add automatic data and return types to the actions when using context.dispatchAction('actionName', data)
-    // eslint-disable-next-line @typescript-eslint/ban-types
-    dispatchAction: <T extends ActionType | SyncActionType>(action: T, data: Parameters<(typeof Actions & typeof SyncActions)[T]>[0] extends {data: any} ? Parameters<(typeof Actions & typeof SyncActions)[T]>[0]['data'] : {}) => T extends ActionType ? Promise<void> : void
+    labs: LabsContextType,
+    order: string,
+    adminApi: AdminApi | null,
+    commentsIsLoading?: boolean,
+    commentIdToHighlight: string | null
 }
 
+export type TranslationFunction = (key: string, replacements?: Record<string, string | number>) => string;
+
+export type AppContextType = EditableAppContext & CommentsOptions & {
+    // This part makes sure we can add automatic data and return types to the actions when using context.dispatchAction('actionName', data)
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    t: TranslationFunction,
+    dispatchAction: <T extends ActionType | SyncActionType>(action: T, data: Parameters<(typeof Actions & typeof SyncActions)[T]>[0] extends { data: any } ? Parameters<(typeof Actions & typeof SyncActions)[T]>[0]['data'] : any) => T extends ActionType ? Promise<void> : void,
+    openFormCount: number
+}
+
+// Copy time from AppContextType
+export type DispatchActionType = AppContextType['dispatchAction'];
 export const AppContext = React.createContext<AppContextType>({} as any);
 
 export const AppContextProvider = AppContext.Provider;
 
 export const useAppContext = () => useContext(AppContext);
+
+export const useOrderChange = () => {
+    const context = useAppContext();
+    const dispatchAction = context.dispatchAction;
+    return (order: string) => {
+        dispatchAction('setOrder', {order});
+    };
+};
+
+export const useLabs = () => {
+    try {
+        const context = useAppContext();
+        return context.labs || {};
+    } catch (e) {
+        return {};
+    }
+};
+

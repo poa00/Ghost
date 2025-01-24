@@ -1,4 +1,3 @@
-import commonjs from 'vite-plugin-commonjs';
 import pkg from './package.json';
 import react from '@vitejs/plugin-react';
 import svgr from 'vite-plugin-svgr';
@@ -11,26 +10,24 @@ const outputFileName = pkg.name[0] === '@' ? pkg.name.slice(pkg.name.indexOf('/'
 // https://vitejs.dev/config/
 export default (function viteConfig() {
     return defineConfig({
+        logLevel: process.env.CI ? 'info' : 'warn',
         plugins: [
             svgr(),
-            react(),
-            commonjs({
-                dynamic: {
-                    loose: true
-                }
-            })
+            react()
         ],
         define: {
             'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
             'process.env.VITEST_SEGFAULT_RETRY': 3
         },
         preview: {
+            host: '0.0.0.0',
             port: 7173
         },
         server: {
             port: 5368
         },
         build: {
+            reportCompressedSize: false,
             outDir: resolve(__dirname, 'umd'),
             emptyOutDir: true,
             minify: true,

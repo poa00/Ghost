@@ -5,8 +5,10 @@ const apiMw = require('../../middleware');
 const mw = require('./middleware');
 
 const shared = require('../../../shared');
-const labs = require('../../../../../shared/labs');
 
+/**
+ * @returns {import('express').Router}
+ */
 module.exports = function apiRoutes() {
     const router = express.Router('admin api');
 
@@ -18,14 +20,6 @@ module.exports = function apiRoutes() {
     // ## Public
     router.get('/site', mw.publicAdminApi, http(api.site.read));
     router.post('/mail_events', mw.publicAdminApi, http(api.mailEvents.add));
-
-    // ## Collections
-    router.get('/collections', mw.authAdminApi, labs.enabledMiddleware('collections'), http(api.collections.browse));
-    router.get('/collections/:id', mw.authAdminApi, labs.enabledMiddleware('collections'), http(api.collections.read));
-    router.get('/collections/slug/:slug', mw.authAdminApi, labs.enabledMiddleware('collections'), http(api.collections.read));
-    router.post('/collections', mw.authAdminApi, labs.enabledMiddleware('collections'), http(api.collections.add));
-    router.put('/collections/:id', mw.authAdminApi, labs.enabledMiddleware('collections'), http(api.collections.edit));
-    router.del('/collections/:id', mw.authAdminApi, labs.enabledMiddleware('collections'), http(api.collections.destroy));
 
     // ## Configuration
     router.get('/config', mw.authAdminApi, http(api.config.read));
@@ -46,8 +40,11 @@ module.exports = function apiRoutes() {
     router.del('/posts/:id', mw.authAdminApi, http(api.posts.destroy));
     router.post('/posts/:id/copy', mw.authAdminApi, http(api.posts.copy));
 
-    router.get('/mentions', labs.enabledMiddleware('webmentions'), mw.authAdminApi, http(api.mentions.browse));
+    router.get('/mentions', mw.authAdminApi, http(api.mentions.browse));
 
+    router.get('/comments/:id', mw.authAdminApi, http(api.commentReplies.read));
+    router.get('/comments/:id/replies', mw.authAdminApi, http(api.commentReplies.browse));
+    router.get('/comments/post/:post_id', mw.authAdminApi, http(api.comments.browse));
     router.put('/comments/:id', mw.authAdminApi, http(api.comments.edit));
 
     // ## Pages
@@ -144,6 +141,7 @@ module.exports = function apiRoutes() {
     router.get('/members/:id', mw.authAdminApi, http(api.members.read));
     router.put('/members/:id', mw.authAdminApi, http(api.members.edit));
     router.del('/members/:id', mw.authAdminApi, http(api.members.destroy));
+    router.del('/members/:id/sessions', mw.authAdminApi, http(api.members.logout));
 
     router.post('/members/:id/subscriptions/', mw.authAdminApi, http(api.members.createSubscription));
     router.put('/members/:id/subscriptions/:subscription_id', mw.authAdminApi, http(api.members.editSubscription));
@@ -239,6 +237,8 @@ module.exports = function apiRoutes() {
         http(api.session.add)
     );
     router.del('/session', mw.authAdminApi, http(api.session.delete));
+    router.post('/session/verify', shared.middleware.brute.sendVerificationCode, http(api.session.sendVerification));
+    router.put('/session/verify', shared.middleware.brute.userVerification, http(api.session.verify));
 
     // ## Identity
     router.get('/identities', mw.authAdminApi, http(api.identities.read));
@@ -346,6 +346,17 @@ module.exports = function apiRoutes() {
 
     router.get('/links', mw.authAdminApi, http(api.links.browse));
     router.put('/links/bulk', mw.authAdminApi, http(api.links.bulkEdit));
+
+    // Recommendations
+    router.get('/recommendations', mw.authAdminApi, http(api.recommendations.browse));
+    router.get('/recommendations/:id', mw.authAdminApi, http(api.recommendations.read));
+    router.post('/recommendations', mw.authAdminApi, http(api.recommendations.add));
+    router.post('/recommendations/check', mw.authAdminApi, http(api.recommendations.check));
+    router.put('/recommendations/:id', mw.authAdminApi, http(api.recommendations.edit));
+    router.del('/recommendations/:id', mw.authAdminApi, http(api.recommendations.destroy));
+
+    // Incoming recommendations
+    router.get('/incoming_recommendations', mw.authAdminApi, http(api.incomingRecommendations.browse));
 
     return router;
 };

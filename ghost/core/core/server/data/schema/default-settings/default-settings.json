@@ -82,6 +82,14 @@
             "flags": "PUBLIC",
             "type": "string"
         },
+        "heading_font": {
+            "defaultValue": "",
+            "type": "string"
+        },
+        "body_font": {
+            "defaultValue": "",
+            "type": "string"
+        },
         "logo": {
             "defaultValue": "",
             "type": "string"
@@ -216,7 +224,7 @@
     },
     "theme": {
         "active_theme": {
-            "defaultValue": "casper",
+            "defaultValue": "source",
             "flags": "RO",
             "type": "string"
         }
@@ -251,7 +259,7 @@
             "defaultValue": "all",
             "validations": {
                 "isEmpty": false,
-                "isIn": [["all", "invite", "none"]]
+                "isIn": [["all", "paid", "invite", "none"]]
             },
             "type": "string"
         },
@@ -307,6 +315,10 @@
                 "isIn": [["true", "false"]]
             },
             "type": "boolean"
+        },
+        "blocked_email_domains": {
+            "defaultValue": "[]",
+            "type": "array"
         }
     },
     "portal": {
@@ -319,7 +331,7 @@
             "type": "boolean"
         },
         "portal_button": {
-            "defaultValue": "true",
+            "defaultValue": "false",
             "validations": {
                 "isEmpty": false,
                 "isIn": [["true", "false"]]
@@ -329,6 +341,14 @@
         "portal_plans": {
             "defaultValue": "[\"free\"]",
             "type": "array"
+        },
+        "portal_default_plan": {
+            "defaultValue": "yearly",
+            "validations": {
+                "isEmpty": false,
+                "isIn": [["yearly", "monthly"]]
+            },
+            "type": "string"
         },
         "portal_products": {
             "defaultValue": "[]",
@@ -548,6 +568,32 @@
         "pintura_css_url": {
             "defaultValue": null,
             "type": "string"
+        }
+    },
+    "donations": {
+        "donations_currency": {
+            "defaultValue": "USD",
+            "validations": {
+                "isEmpty": false
+            },
+            "type": "string"
+        },
+        "donations_suggested_amount": {
+            "defaultValue": 500,
+            "validations": {
+                "isEmpty": false
+            },
+            "type": "number"
+        }
+    },
+    "recommendations": {
+        "recommendations_enabled": {
+            "defaultValue": "false",
+            "validations": {
+                "isEmpty": false,
+                "isIn": [["true", "false"]]
+            },
+            "type": "boolean"
         }
     }
 }

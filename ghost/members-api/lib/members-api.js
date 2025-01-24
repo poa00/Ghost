@@ -37,6 +37,7 @@ module.exports = function MembersAPI({
         getSubject
     },
     models: {
+        DonationPaymentEvent,
         EmailRecipient,
         StripeCustomer,
         StripeCustomerSubscription,
@@ -70,7 +71,10 @@ module.exports = function MembersAPI({
     newslettersService,
     memberAttributionService,
     emailSuppressionList,
-    settingsCache
+    settingsCache,
+    sentry,
+    settingsHelpers,
+    config
 }) {
     const tokenService = new TokenService({
         privateKey,
@@ -107,6 +111,7 @@ module.exports = function MembersAPI({
     });
 
     const eventRepository = new EventRepository({
+        DonationPaymentEvent,
         EmailRecipient,
         MemberSubscribeEvent,
         MemberPaidSubscriptionEvent,
@@ -120,7 +125,8 @@ module.exports = function MembersAPI({
         EmailSpamComplaintEvent,
         Comment,
         labsService,
-        memberAttributionService
+        memberAttributionService,
+        MemberEmailChangeEvent
     });
 
     const memberBREADService = new MemberBREADService({
@@ -140,7 +146,8 @@ module.exports = function MembersAPI({
         labsService,
         stripeService: stripeAPIService,
         memberAttributionService,
-        emailSuppressionList
+        emailSuppressionList,
+        settingsHelpers
     });
 
     const geolocationService = new GeolocationService();
@@ -151,7 +158,9 @@ module.exports = function MembersAPI({
         getSigninURL,
         getText,
         getHTML,
-        getSubject
+        getSubject,
+        sentry,
+        config
     });
 
     const paymentsService = new PaymentsService({
@@ -186,7 +195,10 @@ module.exports = function MembersAPI({
         tokenService,
         sendEmailWithMagicLink,
         memberAttributionService,
-        labsService
+        labsService,
+        newslettersService,
+        settingsCache,
+        sentry
     });
 
     const wellKnownController = new WellKnownController({
@@ -272,8 +284,16 @@ module.exports = function MembersAPI({
         return memberBREADService.read({email});
     }
 
-    async function getMemberIdentityToken(email) {
-        const member = await getMemberIdentityData(email);
+    async function getMemberIdentityDataFromTransientId(transientId) {
+        return memberBREADService.read({transient_id: transientId});
+    }
+
+    async function cycleTransientId(memberId) {
+        await users.cycleTransientId({id: memberId});
+    }
+
+    async function getMemberIdentityToken(transientId) {
+        const member = await getMemberIdentityDataFromTransientId(transientId);
         if (!member) {
             return null;
         }
@@ -306,7 +326,7 @@ module.exports = function MembersAPI({
         return getMemberIdentityData(email);
     }
 
-    const forwardError = fn => async (req, res, next) => {
+    const forwardError = fn => async function forwardErrorMw(req, res, next) {
         try {
             await fn(req, res, next);
         } catch (err) {
@@ -364,7 +384,9 @@ module.exports = function MembersAPI({
         middleware,
         getMemberDataFromMagicLinkToken,
         getMemberIdentityToken,
+        getMemberIdentityDataFromTransientId,
         getMemberIdentityData,
+        cycleTransientId,
         setMemberGeolocationFromIp,
         getPublicConfig,
         bus,

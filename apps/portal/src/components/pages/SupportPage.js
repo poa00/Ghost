@@ -1,32 +1,36 @@
 import {useEffect, useState, useContext} from 'react';
 import SupportError from './SupportError';
-import SupportSuccess from './SupportSuccess';
 import LoadingPage from './LoadingPage';
 import setupGhostApi from '../../utils/api';
 import AppContext from '../../AppContext';
 
 const SupportPage = () => {
-    const {site} = useContext(AppContext);
     const [isLoading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [disabledFeatureError, setDisabledFeatureError] = useState(null);
+    const {member, t, site} = useContext(AppContext);
 
     useEffect(() => {
         async function checkoutDonation() {
-            const siteUrl = window.location.origin;
-            const currentUrl = siteUrl + window.location.pathname;
+            const siteUrl = site.url;
+            const currentUrl = window.location.origin + window.location.pathname;
+            const successUrl = member ? `${currentUrl}?action=support&success=true` : `${currentUrl}#/portal/support/success`;
+            const cancelUrl = currentUrl;
             const api = setupGhostApi({siteUrl});
-            const successUrl = `${currentUrl}#/portal/support/success`;
-            const cancelUrl = `${currentUrl}#/portal/support/error`;
 
             try {
-                await api.member.checkoutDonation({successUrl, cancelUrl});
-            } catch (err) {
-                if (err.message) {
-                    setError(err.message);
-                } else {
-                    setError('There was an error processing your payment. Please try again.');
+                const response = await api.member.checkoutDonation({successUrl, cancelUrl});
+
+                if (response.url) {
+                    window.location.replace(response.url);
                 }
-            } finally {
+            } catch (err) {
+                if (err.type && err.type === 'DisabledFeatureError') {
+                    setDisabledFeatureError(t('This site is not accepting payments at the moment.'));
+                } else {
+                    setError(t('Something went wrong, please try again later.'));
+                }
+
                 setLoading(false);
             }
         }
@@ -38,10 +42,8 @@ const SupportPage = () => {
     }, []);
 
     if (isLoading) {
-        const title = `Support ${site.title}`;
         return (
             <div>
-                <h1>{title}</h1>
                 <LoadingPage />
             </div>
         );
@@ -51,7 +53,12 @@ const SupportPage = () => {
         return <SupportError error={error} />;
     }
 
-    return <SupportSuccess />;
+    if (disabledFeatureError) {
+        // TODO: use a different layout for this error
+        return <SupportError error={disabledFeatureError} />;
+    }
+
+    return null;
 };
 
 export default SupportPage;

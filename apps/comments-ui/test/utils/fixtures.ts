@@ -16,21 +16,38 @@ export function buildMember(override: any = {}) {
     };
 }
 
+export function buildDeletedMember() {
+    return null;
+}
+
+export function buildAnonymousMember(override: any = {}) {
+    return buildMember({...override, name: ''});
+}
+
+export function buildSettings(override: any = {}) {
+    return {
+        meta: {},
+        settings: {},
+        ...override
+    };
+}
+
 export function buildComment(override: any = {}) {
     return {
         id: ObjectId().toString(),
         html: '<p>Empty</p>',
         replies: [],
-        count: {
-            replies: 0,
-            likes: 0
-        },
         liked: false,
         created_at: '2022-08-11T09:26:34.000Z',
         edited_at: null,
         member: buildMember(),
         status: 'published',
-        ...override
+        ...override,
+        count: {
+            replies: 0,
+            likes: 0,
+            ...override.count
+        }
     };
 }
 

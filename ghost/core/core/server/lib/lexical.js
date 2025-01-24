@@ -1,11 +1,15 @@
 const path = require('path');
+const errors = require('@tryghost/errors');
 const urlUtils = require('../../shared/url-utils');
 const config = require('../../shared/config');
+const labs = require('../../shared/labs');
 const storage = require('../adapters/storage');
 
 let nodes;
 let lexicalHtmlRenderer;
 let urlTransformMap;
+let postsService;
+let serializePosts;
 
 function populateNodes() {
     const {DEFAULT_NODES} = require('@tryghost/kg-default-nodes');
@@ -13,6 +17,28 @@ function populateNodes() {
 }
 
 module.exports = {
+    get blankDocument() {
+        return {
+            root: {
+                children: [
+                    {
+                        children: [],
+                        direction: null,
+                        format: '',
+                        indent: 0,
+                        type: 'paragraph',
+                        version: 1
+                    }
+                ],
+                direction: null,
+                format: '',
+                indent: 0,
+                type: 'root',
+                version: 1
+            }
+        };
+    },
+
     get lexicalHtmlRenderer() {
         if (!lexicalHtmlRenderer) {
             if (!nodes) {
@@ -27,6 +53,14 @@ module.exports = {
     },
 
     async render(lexical, userOptions = {}) {
+        if (!postsService) {
+            const getPostServiceInstance = require('../services/posts/posts-service');
+            postsService = getPostServiceInstance();
+        }
+        if (!serializePosts) {
+            serializePosts = require('../api/endpoints/utils/serializers/output/posts').all;
+        }
+
         const options = Object.assign({
             siteUrl: config.get('url'),
             imageOptimization: config.get('imageOptimization'),
@@ -39,9 +73,8 @@ module.exports = {
                     && imageTransform.shouldResizeFileExtension(ext)
                     && typeof storage.getStorage('images').saveRaw === 'function';
             },
-            createDocument() {
-                const {JSDOM} = require('jsdom');
-                return (new JSDOM()).window.document;
+            feature: {
+                contentVisibility: labs.isSet('contentVisibility')
             }
         }, userOptions);
 
@@ -78,5 +111,29 @@ module.exports = {
         }
 
         return urlTransformMap;
+    },
+
+    get htmlToLexicalConverter() {
+        try {
+            if (process.env.CI) {
+                console.time('require @tryghost/kg-html-to-lexical'); // eslint-disable-line no-console
+            }
+
+            const htmlToLexical = require('@tryghost/kg-html-to-lexical').htmlToLexical;
+
+            if (process.env.CI) {
+                console.timeEnd('require @tryghost/kg-html-to-lexical'); // eslint-disable-line no-console
+            }
+
+            return htmlToLexical;
+        } catch (err) {
+            throw new errors.InternalServerError({
+                message: 'Unable to convert from source HTML to Lexical',
+                context: 'The html-to-lexical package was not installed',
+                help: 'Please review any errors from the install process by checking the Ghost logs',
+                code: 'HTML_TO_LEXICAL_INSTALLATION',
+                err: err
+            });
+        }
     }
 };

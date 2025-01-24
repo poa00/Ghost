@@ -1,30 +1,73 @@
-import MultiSelect, {MultiSelectOption} from '../../../admin-x-ds/global/form/MultiSelect';
 import React from 'react';
-import Select from '../../../admin-x-ds/global/form/Select';
-import SettingGroup from '../../../admin-x-ds/settings/SettingGroup';
-import SettingGroupContent from '../../../admin-x-ds/settings/SettingGroupContent';
+import TopLevelGroup from '../../TopLevelGroup';
 import useSettingGroup from '../../../hooks/useSettingGroup';
 import {GroupBase, MultiValue} from 'react-select';
-import {getOptionLabel, getSettingValues} from '../../../utils/helpers';
-import {useGlobalData} from '../../providers/DataProvider';
+import {MultiSelect, MultiSelectOption, Select, Separator, SettingGroupContent, withErrorBoundary} from '@tryghost/admin-x-design-system';
+import {getSettingValues} from '@tryghost/admin-x-framework/api/settings';
+import {useBrowseTiers} from '@tryghost/admin-x-framework/api/tiers';
 
 const MEMBERS_SIGNUP_ACCESS_OPTIONS = [
-    {value: 'all', label: 'Anyone can sign up'},
-    {value: 'invite', label: 'Only people I invite'},
-    {value: 'none', label: 'Nobody'}
+    {
+        value: 'all',
+        label: 'Anyone can sign up',
+        hint: 'All visitors will be able to subscribe and sign in'
+    },
+    {
+        value: 'paid',
+        label: 'Paid-members only',
+        hint: 'A paid Stripe subscription is required to sign up'
+    },
+    {
+        value: 'invite',
+        label: 'Invite-only',
+        hint: 'People can sign in but won\'t be able to sign up'
+    },
+    {
+        value: 'none',
+        label: 'Nobody',
+        hint: 'Disable all member features, including newsletters'
+    }
 ];
 
 const DEFAULT_CONTENT_VISIBILITY_OPTIONS = [
-    {value: 'public', label: 'Public'},
-    {value: 'members', label: 'Members only'},
-    {value: 'paid', label: 'Paid-members only'},
-    {value: 'tiers', label: 'Specific tiers'}
+    {
+        value: 'public',
+        label: 'Public',
+        hint: 'All site visitors to your site, no login required'
+    },
+    {
+        value: 'members',
+        label: 'Members only',
+        hint: 'All logged-in members'
+    },
+    {
+        value: 'paid',
+        label: 'Paid-members only',
+        hint: 'Only logged-in members with an active Stripe subscription'
+    },
+    {
+        value: 'tiers',
+        label: 'Specific tiers',
+        hint: 'Members with any of the selected tiers'
+    }
 ];
 
 const COMMENTS_ENABLED_OPTIONS = [
-    {value: 'all', label: 'All members'},
-    {value: 'paid', label: 'Paid-members only'},
-    {value: 'off', label: 'Nobody'}
+    {
+        value: 'all',
+        label: 'All members',
+        hint: 'Logged-in members'
+    },
+    {
+        value: 'paid',
+        label: 'Paid-members only',
+        hint: 'Only logged-in members with an active Stripe subscription'
+    },
+    {
+        value: 'off',
+        label: 'Nobody',
+        hint: 'Disable commenting completely'
+    }
 ];
 
 const Access: React.FC<{ keywords: string[] }> = ({keywords}) => {
@@ -42,20 +85,16 @@ const Access: React.FC<{ keywords: string[] }> = ({keywords}) => {
         'members_signup_access', 'default_content_visibility', 'default_content_visibility_tiers', 'comments_enabled'
     ]) as string[];
 
-    const membersSignupAccessLabel = getOptionLabel(MEMBERS_SIGNUP_ACCESS_OPTIONS, membersSignupAccess);
-    const defaultContentVisibilityLabel = getOptionLabel(DEFAULT_CONTENT_VISIBILITY_OPTIONS, defaultContentVisibility);
-    const commentsEnabledLabel = getOptionLabel(COMMENTS_ENABLED_OPTIONS, commentsEnabled);
-
-    const {tiers} = useGlobalData();
+    const {data: {tiers} = {}} = useBrowseTiers();
 
     const tierOptionGroups: GroupBase<MultiSelectOption>[] = [
         {
             label: 'Active Tiers',
-            options: tiers.filter(({active}) => active).map(tier => ({value: tier.id, label: tier.name}))
+            options: tiers?.filter(({active}) => active).map(tier => ({value: tier.id, label: tier.name})) || []
         },
         {
             label: 'Archived Tiers',
-            options: tiers.filter(({active}) => !active).map(tier => ({value: tier.id, label: tier.name}))
+            options: tiers?.filter(({active}) => !active).map(tier => ({value: tier.id, label: tier.name})) || []
         }
     ];
 
@@ -67,86 +106,90 @@ const Access: React.FC<{ keywords: string[] }> = ({keywords}) => {
         updateSetting('default_content_visibility_tiers', JSON.stringify(selectedTiers));
     };
 
-    const values = (
-        <SettingGroupContent
-            values={[
-                {
-                    heading: 'Subscription access',
-                    key: 'subscription-access',
-                    value: membersSignupAccessLabel
-                },
-                {
-                    heading: 'Default post access',
-                    key: 'default-post-access',
-                    value: defaultContentVisibilityLabel
-                },
-                {
-                    heading: 'Commenting',
-                    key: 'commenting',
-                    value: commentsEnabledLabel
-                }
-            ]}
-        />
-    );
-
     const form = (
-        <SettingGroupContent columns={1}>
-            <Select
-                hint='Who should be able to subscribe to your site?'
-                options={MEMBERS_SIGNUP_ACCESS_OPTIONS}
-                selectedOption={membersSignupAccess}
-                title="Subscription access"
-                onSelect={(value) => {
-                    updateSetting('members_signup_access', value);
-                }}
-            />
-            <Select
-                hint='When a new post is created, who should have access?'
-                options={DEFAULT_CONTENT_VISIBILITY_OPTIONS}
-                selectedOption={defaultContentVisibility}
-                title="Default post access"
-                onSelect={(value) => {
-                    updateSetting('default_content_visibility', value);
-                }}
-            />
+        <SettingGroupContent className='gap-y-4' columns={1}>
+            <div className="flex flex-col content-center items-center gap-4 md:flex-row">
+                <div className="w-full min-w-[160px] max-w-none md:w-2/3 md:max-w-[320px]">Who should be able to subscribe to your site?</div>
+                <div className="w-full md:flex-1">
+                    <Select 
+                        options={MEMBERS_SIGNUP_ACCESS_OPTIONS}
+                        selectedOption={MEMBERS_SIGNUP_ACCESS_OPTIONS.find(option => option.value === membersSignupAccess)}
+                        testId='subscription-access-select'
+                        onSelect={(option) => {
+                            updateSetting('members_signup_access', option?.value || null);
+                            handleEditingChange(true);
+                        }}
+                    />
+                </div>
+            </div>
+            <Separator className="border-grey-200 dark:border-grey-900" />
+            <div className="flex flex-col content-center items-center gap-4 md:flex-row">
+                <div className="w-full min-w-[160px] max-w-none md:w-2/3 md:max-w-[320px]">Who should have access to new posts?</div>
+                <div className="w-full md:flex-1">
+                    <Select
+                        options={DEFAULT_CONTENT_VISIBILITY_OPTIONS}
+                        selectedOption={DEFAULT_CONTENT_VISIBILITY_OPTIONS.find(option => option.value === defaultContentVisibility)}
+                        testId='default-post-access-select'
+                        onSelect={(option) => {
+                            updateSetting('default_content_visibility', option?.value || null);
+                            handleEditingChange(true);
+                        }}
+                    />
+                </div>
+            </div>
             {defaultContentVisibility === 'tiers' && (
-                <MultiSelect
-                    color='black'
-                    options={tierOptionGroups.filter(group => group.options.length > 0)}
-                    title='Select tiers'
-                    values={selectedTierOptions}
-                    clearBg
-                    onChange={setSelectedTiers}
-                />
+                <div className="flex flex-col content-center items-center gap-4 md:flex-row">
+                    <div className="w-full min-w-[160px] max-w-none md:w-2/3 md:max-w-[320px]">Select specific tiers</div>
+                    <div className="w-full md:flex-1">
+                        <MultiSelect
+                            color='black'
+                            options={tierOptionGroups.filter(group => group.options.length > 0)}
+                            testId='tiers-select'
+                            values={selectedTierOptions}
+                            onChange={(selectedOptions) => {
+                                setSelectedTiers(selectedOptions);
+                                handleEditingChange(true);
+                            }}
+                        />
+                    </div>
+                </div>
             )}
-            <Select
-                hint='Who can comment on posts?'
-                options={COMMENTS_ENABLED_OPTIONS}
-                selectedOption={commentsEnabled}
-                title="Commenting"
-                onSelect={(value) => {
-                    updateSetting('comments_enabled', value);
-                }}
-            />
+            <Separator className="border-grey-200 dark:border-grey-900" />
+            <div className="flex flex-col content-center items-center gap-4 md:flex-row">
+                <div className="w-full min-w-[160px] max-w-none md:w-2/3 md:max-w-[320px]">Who can comment on posts?</div>
+                <div className="w-full md:flex-1">
+                    <Select
+                        options={COMMENTS_ENABLED_OPTIONS}
+                        selectedOption={COMMENTS_ENABLED_OPTIONS.find(option => option.value === commentsEnabled)}
+                        testId='commenting-select'
+                        title=""
+                        onSelect={(option) => {
+                            updateSetting('comments_enabled', option?.value || null);
+                            handleEditingChange(true);
+                        }}
+                    />
+                </div>
+            </div>
         </SettingGroupContent>
     );
 
     return (
-        <SettingGroup
+        <TopLevelGroup
             description='Set up default access options for subscription and posts'
             isEditing={isEditing}
             keywords={keywords}
-            navid='access'
+            navid='members'
             saveState={saveState}
             testId='access'
             title='Access'
+            hideEditButton
             onCancel={handleCancel}
             onEditingChange={handleEditingChange}
             onSave={handleSave}
         >
-            {isEditing ? form : values}
-        </SettingGroup>
+            {form}
+        </TopLevelGroup>
     );
 };
 
-export default Access;
+export default withErrorBoundary(Access, 'Access');

@@ -1,8 +1,12 @@
 /* eslint-disable no-console */
 import {getCheckoutSessionDataFromPlanAttribute, getUrlHistory} from './utils/helpers';
-import {HumanReadableError} from './utils/errors';
+import {HumanReadableError, chooseBestErrorMessage} from './utils/errors';
+import i18nLib from '@tryghost/i18n';
 
-export function formSubmitHandler({event, form, errorEl, siteUrl, submitHandler}) {
+export async function formSubmitHandler({event, form, errorEl, siteUrl, submitHandler},
+    t = (str) => {
+        return str;
+    }) {
     form.removeEventListener('submit', submitHandler);
     event.preventDefault();
     if (errorEl) {
@@ -16,10 +20,16 @@ export function formSubmitHandler({event, form, errorEl, siteUrl, submitHandler}
     let name = (nameInput && nameInput.value) || undefined;
     let emailType = undefined;
     let labels = [];
+    let newsletters = [];
 
     let labelInputs = event.target.querySelectorAll('input[data-members-label]') || [];
     for (let i = 0; i < labelInputs.length; ++i) {
         labels.push(labelInputs[i].value);
+    }
+
+    let newsletterInputs = event.target.querySelectorAll('input[type=hidden][data-members-newsletter], input[type=checkbox][data-members-newsletter]:checked, input[type=radio][data-members-newsletter]:checked') || [];
+    for (let i = 0; i < newsletterInputs.length; ++i) {
+        newsletters.push({name: newsletterInputs[i].value});
     }
 
     if (form.dataset.membersForm) {
@@ -38,33 +48,57 @@ export function formSubmitHandler({event, form, errorEl, siteUrl, submitHandler}
     if (urlHistory) {
         reqBody.urlHistory = urlHistory;
     }
+    if (newsletterInputs.length > 0) {
+        reqBody.newsletters = newsletters;
+    } else {
+        // If there was only check-able newsletter inputs in the form, but none were checked, set reqBody.newsletters
+        // to an empty array so that the member is not signed up to the default newsletters
+        const checkableNewsletterInputs = event.target.querySelectorAll('input[type=checkbox][data-members-newsletter]') || [];
 
-    fetch(`${siteUrl}/members/api/send-magic-link/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(reqBody)
-    }).then(function (res) {
+        if (checkableNewsletterInputs.length > 0) {
+            reqBody.newsletters = [];
+        }
+    }
+
+    try {
+        const integrityTokenRes = await fetch(`${siteUrl}/members/api/integrity-token/`, {
+            method: 'GET'
+        });
+        const integrityToken = await integrityTokenRes.text();
+
+        const magicLinkRes = await fetch(`${siteUrl}/members/api/send-magic-link/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ...reqBody,
+                integrityToken
+            })
+        });
+
         form.addEventListener('submit', submitHandler);
         form.classList.remove('loading');
-        if (res.ok) {
+        if (magicLinkRes.ok) {
             form.classList.add('success');
         } else {
-            return HumanReadableError.fromApiResponse(res).then((e) => {
+            return HumanReadableError.fromApiResponse(magicLinkRes).then((e) => {
                 throw e;
             });
         }
-    }).catch((err) => {
+    } catch (err) {
         if (errorEl) {
             // This theme supports a custom error element
-            errorEl.innerText = HumanReadableError.getMessageFromError(err, 'There was an error sending the email, please try again');
+            errorEl.innerText = chooseBestErrorMessage(err, t('There was an error sending the email, please try again'), t);
         }
         form.classList.add('error');
-    });
+    }
 }
 
 export function planClickHandler({event, el, errorEl, siteUrl, site, member, clickHandler}) {
+    const i18nLanguage = site.locale | 'en';
+    const i18n = i18nLib(i18nLanguage, 'portal');
+    const t = i18n.t;
     el.removeEventListener('click', clickHandler);
     event.preventDefault();
     let plan = el.dataset.membersPlan;
@@ -117,7 +151,7 @@ export function planClickHandler({event, el, errorEl, siteUrl, site, member, cli
             })
         }).then(function (res) {
             if (!res.ok) {
-                throw new Error('Could not create stripe checkout session');
+                throw new Error(t('Could not create stripe checkout session'));
             }
             return res.json();
         });
@@ -145,6 +179,9 @@ export function planClickHandler({event, el, errorEl, siteUrl, site, member, cli
 }
 
 export function handleDataAttributes({siteUrl, site, member}) {
+    const i18nLanguage = site.locale | 'en';
+    const i18n = i18nLib(i18nLanguage, 'portal');
+    const t = i18n.t;
     if (!siteUrl) {
         return;
     }
@@ -152,7 +189,7 @@ export function handleDataAttributes({siteUrl, site, member}) {
     Array.prototype.forEach.call(document.querySelectorAll('form[data-members-form]'), function (form) {
         let errorEl = form.querySelector('[data-members-error]');
         function submitHandler(event) {
-            formSubmitHandler({event, errorEl, form, siteUrl, submitHandler});
+            formSubmitHandler({event, errorEl, form, siteUrl, submitHandler}, t);
         }
         form.addEventListener('submit', submitHandler);
     });
@@ -208,7 +245,7 @@ export function handleDataAttributes({siteUrl, site, member}) {
                     })
                 }).then(function (res) {
                     if (!res.ok) {
-                        throw new Error('Could not create stripe checkout session');
+                        throw new Error(t('Could not create stripe checkout session'));
                     }
                     return res.json();
                 });
@@ -219,7 +256,7 @@ export function handleDataAttributes({siteUrl, site, member}) {
                 });
             }).then(function (result) {
                 if (result.error) {
-                    throw new Error(result.error.message);
+                    throw new Error(t(result.error.message));
                 }
             }).catch(function (err) {
                 console.error(err);
@@ -297,7 +334,7 @@ export function handleDataAttributes({siteUrl, site, member}) {
                     el.classList.add('error');
 
                     if (errorEl) {
-                        errorEl.innerText = 'There was an error cancelling your subscription, please try again.';
+                        errorEl.innerText = t('There was an error cancelling your subscription, please try again.');
                     }
                 }
             });
@@ -347,7 +384,7 @@ export function handleDataAttributes({siteUrl, site, member}) {
                     el.classList.add('error');
 
                     if (errorEl) {
-                        errorEl.innerText = 'There was an error continuing your subscription, please try again.';
+                        errorEl.innerText = t('There was an error continuing your subscription, please try again.');
                     }
                 }
             });
